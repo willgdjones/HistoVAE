@@ -5,7 +5,6 @@ with Keras and deconvolution layers.
   https://arxiv.org/abs/1312.6114
 '''
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.stats import norm
 
 from keras.layers import Input, Dense, Lambda, Flatten, Reshape, Layer
@@ -13,24 +12,50 @@ from keras.layers import Conv2D, Conv2DTranspose
 from keras.models import Model
 from keras import backend as K
 from keras import metrics
-from keras.datasets import mnist
+from keras.datasets import mnist, cifar10
+import sys
+rootdir = '/hps/nobackup/research/stegle/users/willj/HistoVAE'
+sys.path.append(rootdir)
+from skimage.transform import resize
+from sklearn.model_selection import train_test_split
+from keras import optimizers
+from keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
 
-# input image dimensions
-img_rows, img_cols, img_chns = 28, 28, 1
+
+
+np.random.seed(42)
+
 # number of convolutional filters to use
 filters = 64
 # convolution kernel size
 num_conv = 3
+batch_size = 32
 
-batch_size = 100
+
+dataset = '128-patches'
+
+if dataset == 'mnist':
+    img_rows, img_cols, img_chns = 28, 28, 1
+elif dataset == 'cifar10':
+    img_rows, img_cols, img_chns = 32, 32, 3
+elif dataset == 'histo-dev':
+    img_rows, img_cols, img_chns = 256, 256, 3
+elif dataset == '128-patches':
+    img_rows, img_cols, img_chns = 128, 128, 3
+
 if K.image_data_format() == 'channels_first':
     original_img_size = (img_chns, img_rows, img_cols)
 else:
     original_img_size = (img_rows, img_cols, img_chns)
-latent_dim = 2
-intermediate_dim = 128
+
+
+
+
+latent_dim = 16
+intermediate_dim = 512
 epsilon_std = 1.0
-epochs = 5
+epochs = 100
+lr = 0.0001
 
 x = Input(shape=original_img_size)
 conv_1 = Conv2D(img_chns,
@@ -61,18 +86,21 @@ def sampling(args):
                               mean=0., stddev=epsilon_std)
     return z_mean + K.exp(z_log_var) * epsilon
 
+
 # note that "output_shape" isn't necessary with the TensorFlow backend
 # so you could write `Lambda(sampling)([z_mean, z_log_var])`
 z = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
 
 # we instantiate these layers separately so as to reuse them later
+
+
 decoder_hid = Dense(intermediate_dim, activation='relu')
-decoder_upsample = Dense(filters * 14 * 14, activation='relu')
+decoder_upsample = Dense(filters * int(img_rows/2) * int(img_rows/2), activation='relu')
 
 if K.image_data_format() == 'channels_first':
-    output_shape = (batch_size, filters, 14, 14)
+    output_shape = (batch_size, filters, int(img_rows/2), int(img_rows/2))
 else:
-    output_shape = (batch_size, 14, 14, filters)
+    output_shape = (batch_size, int(img_rows/2), int(img_rows/2), filters)
 
 decoder_reshape = Reshape(output_shape[1:])
 decoder_deconv_1 = Conv2DTranspose(filters,
@@ -108,6 +136,8 @@ x_decoded_relu = decoder_deconv_3_upsamp(deconv_2_decoded)
 x_decoded_mean_squash = decoder_mean_squash(x_decoded_relu)
 
 
+
+
 # Custom loss layer
 class CustomVariationalLayer(Layer):
     def __init__(self, **kwargs):
@@ -130,71 +160,111 @@ class CustomVariationalLayer(Layer):
         return x
 
 
+
 y = CustomVariationalLayer()([x, x_decoded_mean_squash])
 vae = Model(x, y)
-vae.compile(optimizer='rmsprop', loss=None)
-vae.summary()
+
+rmsprop = optimizers.RMSprop(lr=lr, rho=0.9, epsilon=1e-08, decay=0.0)
+# sgd = optimizers.sgd(lr=0.01, momentum=0.0, decay=0.0, nesterov=False)
+vae.compile(optimizer=rmsprop, loss=None)
 
 
-# train the VAE on MNIST digits
-(x_train, _), (x_test, y_test) = mnist.load_data()
 
-x_train = x_train.astype('float32') / 255.
-x_train = x_train.reshape((x_train.shape[0],) + original_img_size)
-x_test = x_test.astype('float32') / 255.
-x_test = x_test.reshape((x_test.shape[0],) + original_img_size)
+if __name__ == '__main__':
+    vae.summary()
+    if dataset == 'mnist':
+        (x_train, _), (x_test, y_test) = mnist.load_data()
 
-print('x_train.shape:', x_train.shape)
+        x_train = x_train.astype('float32') / 255.
+        x_train = x_train.reshape((x_train.shape[0],) + original_img_size)
+        x_test = x_test.astype('float32') / 255.
+        x_test = x_test.reshape((x_test.shape[0],) + original_img_size)
 
-vae.fit(x_train,
-        shuffle=True,
-        epochs=epochs,
-        batch_size=batch_size,
-        validation_data=(x_test, None))
 
-vae.save('models/vae.hdf5')
 
-# build a model to project inputs on the latent space
-encoder = Model(x, z_mean)
-encoder.save('models/encoder.hdf5')
+        print('x_train.shape:', x_train.shape)
 
-# display a 2D plot of the digit classes in the latent space
-x_test_encoded = encoder.predict(x_test, batch_size=batch_size)
-# plt.figure(figsize=(6, 6))
-# plt.scatter(x_test_encoded[:, 0], x_test_encoded[:, 1], c=y_test)
-# plt.colorbar()
-# plt.show()
+    elif dataset == 'histo-dev':
+        import h5py
+        filename = '/hps/nobackup/research/stegle/users/willj/GTEx/data/h5py/patches-all_s-10_p-50.hdf5'
+        with h5py.File(filename) as f:
+            patches = f['/patches'].value
+            labels = f['/labels'].value
 
-# build a digit generator that can sample from the learned distribution
-decoder_input = Input(shape=(latent_dim,))
-_hid_decoded = decoder_hid(decoder_input)
-_up_decoded = decoder_upsample(_hid_decoded)
-_reshape_decoded = decoder_reshape(_up_decoded)
-_deconv_1_decoded = decoder_deconv_1(_reshape_decoded)
-_deconv_2_decoded = decoder_deconv_2(_deconv_1_decoded)
-_x_decoded_relu = decoder_deconv_3_upsamp(_deconv_2_decoded)
-_x_decoded_mean_squash = decoder_mean_squash(_x_decoded_relu)
-generator = Model(decoder_input, _x_decoded_mean_squash)
-generator.save('models/generator.hdf5')
+        patches = [resize(x, (256, 256)) for x in patches]
+        x_train, x_test, y_train, y_test = train_test_split(patches, labels, test_size=0.4, random_state=42)
+        x_test, x_val, y_test, y_val = train_test_split(x_test, y_test, test_size=0.5, random_state=42)
 
-# display a 2D manifold of the digits
-n = 15  # figure with 15x15 digits
-digit_size = 28
-figure = np.zeros((digit_size * n, digit_size * n))
-# linearly spaced coordinates on the unit square were transformed through the inverse CDF (ppf) of the Gaussian
-# to produce values of the latent variables z, since the prior of the latent space is Gaussian
-grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
-grid_y = norm.ppf(np.linspace(0.05, 0.95, n))
+        x_train = np.array(x_train, dtype='float32')
+        x_test = np.array(x_test, dtype='float32')
+        x_val = np.array(x_val, dtype='float32')
 
-for i, yi in enumerate(grid_x):
-    for j, xi in enumerate(grid_y):
-        z_sample = np.array([[xi, yi]])
-        z_sample = np.tile(z_sample, batch_size).reshape(batch_size, 2)
-        x_decoded = generator.predict(z_sample, batch_size=batch_size)
-        digit = x_decoded[0].reshape(digit_size, digit_size)
-        figure[i * digit_size: (i + 1) * digit_size,
-               j * digit_size: (j + 1) * digit_size] = digit
+        # import pdb; pdb.set_trace()
 
-# plt.figure(figsize=(10, 10))
-# plt.imshow(figure, cmap='Greys_r')
-# plt.show()
+        print('x_train.shape:', x_train.shape)
+
+    elif dataset == 'cifar10':
+        (x_train, _), (x_test, y_test) = cifar10.load_data()
+        x_train = x_train.astype('float32') / 255.
+        x_test = x_test.astype('float32') / 255.
+
+    if dataset == '128-patches':
+        import h5py
+
+
+        filename = '/hps/nobackup/research/stegle/users/willj/GTEx/data/patches/Lung/GTEX-144GM-0126_128.hdf5'
+        with h5py.File(filename) as f:
+            patches1 = f['/patches'].value
+            labels1 = ['144GM'] * len(patches1)
+
+        filename = '/hps/nobackup/research/stegle/users/willj/GTEx/data/patches/Lung/GTEX-13N1W-0726_128.hdf5'
+        with h5py.File(filename) as f:
+            patches2 = f['/patches'].value
+            labels2 = ['13N1W'] * len(patches2)
+
+        patches = np.concatenate([patches1, patches2])
+        labels = labels1 + labels2
+
+        x_train, x_test, y_train, y_test = train_test_split(patches, labels, test_size=0.4, random_state=42)
+        x_test, x_val, y_test, y_val = train_test_split(x_test, y_test, test_size=0.5, random_state=42)
+
+        x_train = np.array(x_train, dtype='float32') / 255.
+        x_test = np.array(x_test, dtype='float32') / 255.
+        x_val = np.array(x_val, dtype='float32') / 255.
+        import pdb; pdb.set_trace()
+
+
+
+    vae.fit(x_train,shuffle=True,epochs=epochs,
+        batch_size=batch_size,validation_data=(x_test, None),
+        callbacks=[
+            TensorBoard(log_dir='logs'),
+            EarlyStopping(patience=10)
+        ])
+
+    vae.save('models/vae-{dataset}.hdf5'.format(dataset=dataset))
+
+
+
+    # build a model to project inputs on the latent space
+    encoder = Model(x, z_mean)
+    encoder.save('models/encoder-{dataset}.hdf5'.format(dataset=dataset))
+
+    # display a 2D plot of the digit classes in the latent space
+    x_test_encoded = encoder.predict(x_test, batch_size=batch_size)
+    # plt.figure(figsize=(6, 6))
+    # plt.scatter(x_test_encoded[:, 0], x_test_encoded[:, 1], c=y_test)
+    # plt.colorbar()
+    # plt.show()
+
+    # build a digit generator that can sample from the learned distribution
+    decoder_input = Input(shape=(latent_dim,))
+    _hid_decoded = decoder_hid(decoder_input)
+    _up_decoded = decoder_upsample(_hid_decoded)
+    _reshape_decoded = decoder_reshape(_up_decoded)
+    _deconv_1_decoded = decoder_deconv_1(_reshape_decoded)
+    _deconv_2_decoded = decoder_deconv_2(_deconv_1_decoded)
+    _x_decoded_relu = decoder_deconv_3_upsamp(_deconv_2_decoded)
+    _x_decoded_mean_squash = decoder_mean_squash(_x_decoded_relu)
+    generator = Model(decoder_input, _x_decoded_mean_squash)
+    generator.save('models/generator-{dataset}.hdf5'.format(dataset=dataset))
