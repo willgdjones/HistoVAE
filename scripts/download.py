@@ -2,10 +2,10 @@ import sys
 import requests.packages.urllib3
 import click
 import logging
+from joblib import Parallel, delayed
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
-from src.classes import Sample, Image, Donor, Annotations, Collection
-from joblib import Parallel, delayed
+from src.classes import Collection
 
 
 logger = logging.getLogger(__name__)
@@ -35,18 +35,22 @@ def main(n_image, parallel, n_jobs):
             s.tissue == 'Lung' and
             s.has_image() and
             s.has_expression()
-            )
+        )
     )
     lung_images = [x.get_image() for x in lung_samples][:n_image]
 
     logger.info(f"Starting download with {n_jobs} workers")
     if parallel:
+        logger.debug("Running in parallel")
         results = Parallel(
             n_jobs=n_jobs, backend='multiprocessing')(
-            delayed(download_image)(image) for image in lung_images
+            delayed(
+                lambda image: image.download()
+            )(image) for image in lung_images
         )
     else:
-        results = [download_image(image) for image in lung_images]
+        logger.debug("Running in serial")
+        results = [image.download() for image in lung_images]
 
     assert all(results), "Some images failed to download"
 
