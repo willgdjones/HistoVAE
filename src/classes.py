@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 import requests
+from os.path import isfile
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +20,26 @@ class Image():
         raise NotImplementedError
 
     def download(self):
-        session = requests.session()
         imageID = f'GTEX-{self.ID.donor}-{self.ID.sample}'
-        URL = "https://brd.nci.nih.gov/brd/imagedownload/" + imageID
-        response = session.get(URL)
         output_filename = imageID + ".svs"
         output_filepath = IMAGE_PATH + output_filename
-        if response.ok:
-            with open(output_filepath, 'wb') as outfile:
-                outfile.write(response.content)
+
+        if isfile(output_filepath):
+            logger.debug(f'{str(self)} imagefile exists')
+            return True
         else:
-            print('Something wrong')
+            logger.debug(f'Downloading {str(self)}')
+            session = requests.session()
+            URL = "https://brd.nci.nih.gov/brd/imagedownload/" + imageID
+            response = session.get(URL)
+            if response.ok:
+                with open(output_filepath, 'wb') as outfile:
+                    outfile.write(response.content)
+                return True
+            else:
+                logger.debug(f'Something wrong with {str(self)}')
+                return False
+
 
 
 class ID():
@@ -43,8 +53,7 @@ class ID():
             self.GTExID = GTExID
             self.donor = split[1]
             self.sample = split[2]
-        if len(split) == 5:
-            self.aliquot = split[-1]
+        self.aliquot = split[-1] if len(split) == 5 else None
 
     def __repr__(self):
         return f"ID:{self.GTExID}"
@@ -57,22 +66,24 @@ class Sample():
 
     def __init__(self, row):
         self.ID = ID(row['SAMPID'])
+        self.imageID = f'GTEX-{self.ID.donor}-{self.ID.sample}'
         self.tissue = row['SMTSD']
         self.annotations = row['SMPTHNTS']
 
     def __repr__(self):
-        return f"Sample:{self.tissue[:5]}|ID:{self.ID.donor}-{self.ID.sample}"
+        return f"Sample:{self.tissue[:5]}|ID:{self.ID.donor}-{self.ID.sample}-{self.ID.aliquot}"
 
     def get_image(self):
-        return Image(self.ID)
+        return Image(self.imageID)
 
     def has_image(self):
-        imageID = f'GTEX-{self.ID.donor}-{self.ID.sample}'
-        return imageID in Collection.image_id_list
+        return self.imageID in Collection.imageIDs
 
+    def has_expression(self):
 
-    def get_expression(self):
-        raise NotImplementedError
+        expressionID = f"GTEX-{self.ID.donor}-{self.ID.sample}-SM-{self.ID.aliquot}"
+
+        return expressionID in Collection.expressionIDs
 
     def get_aliquots(self):
         raise NotImplementedError
@@ -106,9 +117,21 @@ class Annotations():
         sep='\t'
     )
 
+
 class Collection():
+
     samples = Annotations.sample.apply(Sample, axis=1)
 
     with open(TXT_PATH + 'image_ids.txt') as image_file:
-        image_id_list = image_file.read().splitlines()
-        images = [Image(x) for x in image_id_list]
+        imageIDs = image_file.read().splitlines()
+        images = [Image(x) for x in imageIDs]
+
+    expressionIDs = pd.read_csv(
+        'txt/expressionIDs.txt', sep=','
+    ).values.flatten()
+
+    @staticmethod
+    def where(collection, condition):
+        logger.debug('Subsetting collection')
+        selection = list(filter(condition, eval(f"Collection.{collection}")))
+        return sorted(selection, key=lambda x: x.ID.donor)
