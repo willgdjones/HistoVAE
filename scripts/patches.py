@@ -3,15 +3,26 @@ import logging
 from openslide.deepzoom import DeepZoomGenerator
 import cv2
 import mahotas
+import click
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import namedtuple
 sys.path.append('.')
 from src.classes import Collection, Coord
+from joblib import Parallel, delayed
 
 logger = logging.getLogger(__name__)
 
-def main():
+@click.command()
+@click.option(
+    '--parallel', default=False,
+    help="Run script in parallel where possible"
+)
+@click.option(
+    '--n_jobs', default=4,
+    help="Number of images to download"
+)
+def main(parallel, n_jobs):
     logger.info('Initializing patches script')
     lung_samples = Collection.where(
         'samples', lambda s: (
@@ -25,15 +36,23 @@ def main():
     results = [image.download() for image in lung_images]
     assert all(results), "Some images failed to download"
 
-    patches = lung_images[0].get_patches()
+    if parallel:
+        logger.debug(f"Parallel execution with {n_jobs} jobs")
+        image_patches = Parallel(
+            n_jobs=n_jobs, backend='multiprocessing'
+            )(delayed(
+                lambda image: image.get_patches()
+            )(image) for image in lung_images
+        )
+    else:
+        logger.debug("Serial execution")
+        image_patches = [
+            p.get_patches() for p in lung_images
+        ]
+    import pdb; pdb.set_trace()
 
 
 
-    # tiles = [
-    #     tile_generator.get_tile(level_count, (coord.x, coord.y))
-    #     for coord in coords
-    # ]
-    # mask_coords = np.argwhere(mask > 0)
 
 
     import pdb; pdb.set_trace()

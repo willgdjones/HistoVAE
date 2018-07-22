@@ -41,15 +41,15 @@ def main(n_image, parallel, n_jobs):
 
     logger.info(f"Starting download with {n_jobs} workers")
     if parallel:
-        logger.debug("Running in parallel")
+        logger.debug("Parallel execution")
         results = Parallel(
-            n_jobs=n_jobs, backend='multiprocessing')(
-            delayed(
+            n_jobs=n_jobs, backend='multiprocessing'
+            )(delayed(
                 lambda image: image.download()
             )(image) for image in lung_images
         )
     else:
-        logger.debug("Running in serial")
+        logger.debug("Serial execution")
         results = [image.download() for image in lung_images]
 
     assert all(results), "Some images failed to download"

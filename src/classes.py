@@ -8,7 +8,8 @@ from openslide import open_slide
 from openslide.deepzoom import DeepZoomGenerator
 import numpy as np
 from tqdm import tqdm
-from tables import open_file, Atom
+from tables import open_file, Atom, Filters
+import matplotlib.pyplot as plt
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class Image():
         self.imageID = imageID
         self.ID = ID(imageID)
         self.imagefilepath = IMAGE_PATH + self.imageID + ".svs"
-        self.patchfilepath = PATCH_PATH + self.imageID + ".svs"
+        self.patchfilepath = PATCH_PATH + self.imageID + ".hdf5"
 
     def __repr__(self):
         return f"<Image:{self.ID.donor}-{self.ID.sample}>"
@@ -54,18 +55,32 @@ class Image():
                 return False
 
     def has_patches(self):
-        raise NotImplementedError
+        return isfile(self.patchfilepath)
 
     def get_patches(self):
-        h5file = open_file(
-            self.patchfilepath, mode='w', title=f'{self.imageID} patches'
-        )
-        atom = Atom.from_dtype(np.dtype('int8'))
 
-        for patchsize in [128, 256]:
+        if self.has_patches():
+            logger.debug(f'Retrieving patches for {self.imageID}')
+            h5file = open_file(
+                self.patchfilepath, mode='r'
+            )
+            return h5file
+
+        logger.debug(
+            f'Generating patches for {self.imageID}'
+        )
+        filters = Filters(complib='zlib', complevel=5)
+        h5file = open_file(
+            self.patchfilepath, mode='w', title=f'{self.imageID} patches',
+            filters=filters
+        )
+
+        atom = Atom.from_dtype(np.dtype('uint8'))
+
+        for patchsize in [128, 256, 512, 1024]:
 
             logger.debug(
-                f'Retrieving patches for {self.imageID} patchsize: {patchsize}'
+                f'patchsize: {patchsize}'
             )
             slide = self.load_slide()
 
@@ -107,35 +122,40 @@ class Image():
                 for coord in coords
                 if mask[coord.y, coord.x] > 0
             ]
-
             tile_generator = DeepZoomGenerator(
                 slide, tile_size=patchsize, overlap=0, limit_bounds=False
             )
             level_count = tile_generator.level_count - 1
-
-            logger.debug('Retrieving tiles')
-
 
             logger.debug(
                 f'Saving patches for {self.imageID} patchsize: {patchsize}'
             )
 
             N = len(mask_coords)
-
-            carray = h5file.create_carray(
-                '/', f'Size {patchsize}', atom,
-                (patchsize, patchsize, 3, N)
-            )
-
-            tiles = np.zeros((patchsize, patchsize, 3, N))
-
-            for (i, coord) in tqdm(enumerate(mask_coords)):
-                tiles[:, :, :, i] = np.array(
+            tiles = np.zeros((patchsize, patchsize, 3, N), dtype=np.uint8)
+            logger.debug('Retrieving tiles')
+            for (i, coord) in tqdm(list(enumerate(mask_coords))):
+                tile = np.array(
                     tile_generator.get_tile(
                         level_count, (coord.x / patchsize, coord.y / patchsize)
                     )
                 )
-            carray[:,:,:,:] = tiles
+                tiles[:, :, :, i] = tile
+
+            percent_whitespace = (
+                tiles.reshape(-1, tiles.shape[-1]) > T_otsu
+            ).sum(0) / np.prod(tiles.shape[:-1])
+            selection = percent_whitespace < 0.25
+            n = sum(selection)
+            selected_tiles = tiles[:, :, :, selection]
+            logger.debug(
+                f"Selected {n} tiles out of {N} ({n/N:0.2}) with percent whitespace < 0.25"
+            )
+            carray = h5file.create_carray(
+                '/', f'Size{patchsize}', atom,
+                (patchsize, patchsize, 3, selected_tiles.shape[-1])
+            )
+            carray[:, :, :, :] = selected_tiles
 
 
 
