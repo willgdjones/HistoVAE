@@ -3,6 +3,7 @@ import logging
 import requests
 import cv2
 import mahotas
+import pickle
 from os.path import isfile
 from openslide import open_slide
 from openslide.deepzoom import DeepZoomGenerator
@@ -10,6 +11,7 @@ import numpy as np
 from tqdm import tqdm
 from tables import open_file, Atom, Filters
 import matplotlib.pyplot as plt
+from collections import Counter
 
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,7 @@ logger = logging.getLogger(__name__)
 TXT_PATH = 'txt/'
 IMAGE_PATH = 'data/images/'
 PATCH_PATH = 'data/patches/'
+CACHE_PATH = '.cache/'
 
 
 class Image():
@@ -24,12 +27,21 @@ class Image():
         self.imageID = imageID
         self.ID = ID(imageID)
         self.imagefilepath = IMAGE_PATH + self.imageID + ".svs"
-        self.patchfilepath = PATCH_PATH + self.imageID + ".hdf5"
+        self.patchcoordsfilepath = PATCH_PATH + self.imageID + ".hdf5"
+        self.patchcoordsfile = None
 
     def __repr__(self):
         return f"<Image:{self.ID.donor}-{self.ID.sample}>"
 
-    def load_slide(self):
+    def has_sample(self):
+        return self.imageID in set(Collection.sample_imageIDs)
+
+    def get_sample(self):
+        return Collection.where(
+            'samples', lambda s: s.imageID == self.imageID
+        )[0]
+
+    def get_slide(self):
         logger.debug(f'Loading {self.imagefilepath}')
         return open_slide(self.imagefilepath)
 
@@ -45,83 +57,98 @@ class Image():
             session = requests.session()
             URL = "https://brd.nci.nih.gov/brd/imagedownload/"\
                     + self.imageID
-            response = session.get(URL)
+            logger.debug(f'Getting URL for {str(self)}')
+            response = session.get(URL, stream=True)
             if response.ok:
-                with open(self.filepath, 'wb') as outfile:
-                    outfile.write(response.content)
+                outfile = open(self.imagefilepath, 'wb')
+                # total_length = int(response.headers.get('content-length'))
+                total_length = 500 * ((2**10)**2)
+                chunk_size = 1024
+                expected_size = (total_length/1024) + 1
+                response_iter = response.iter_content(chunk_size=chunk_size)
+                for chunk in tqdm(response_iter, total=expected_size):
+                    if chunk:
+                        outfile.write(chunk)
+                        outfile.flush()
+                logger.debug(f'Successfully downloaded {str(self)}')
+                outfile.close()
                 return True
             else:
                 logger.debug(f'Something wrong with {str(self)}')
                 return False
 
-    def has_patches(self):
-        return isfile(self.patchfilepath)
+    def has_patchcoords(self):
+        return isfile(self.patchcoordsfilepath)
 
-    def get_patches(self):
+    def get_patchcoordsfile(self):
+        logger.debug(f'Retrieving patches for {self.imageID}')
+        patchcoordsfile = open_file(
+            self.patchcoordsfilepath, mode='r'
+        )
+        return patchcoordsfile
 
+    def generate_patchcoords(self):
         if self.has_patches():
-            logger.debug(f'Retrieving patches for {self.imageID}')
-            h5file = open_file(
-                self.patchfilepath, mode='r'
-            )
-            return h5file
+            patchcoordsfile = self.get_patchcoordsfile()
+            return patchcoordsfile
 
         logger.debug(
             f'Generating patches for {self.imageID}'
         )
         filters = Filters(complib='zlib', complevel=5)
-        h5file = open_file(
-            self.patchfilepath, mode='w', title=f'{self.imageID} patches',
+        patchcoordsfile = open_file(
+            self.patchcoordsfilepath, mode='w', title=f'{self.imageID} patches',
             filters=filters
         )
 
-        atom = Atom.from_dtype(np.dtype('uint8'))
+        atom = Atom.from_dtype(np.dtype('uint16'))
+        slide = self.get_slide()
+        dslevel = slide.level_count - 1
+        dscoord = Coord(*slide.level_dimensions[-1])
+        downsample = slide.level_downsamples[-1]
+
+        logger.debug('Reading region')
+        dsregion = np.array(
+            slide.read_region((0, 0), dslevel, (dscoord.x, dscoord.y))
+        ).transpose(1, 0, 2)
+
+        logger.debug('Performing GaussianBlur')
+        blurreddsregion = cv2.GaussianBlur(dsregion, (51, 51), 0)
+        blurreddsregion = cv2.cvtColor(
+            blurreddsregion, cv2.COLOR_BGR2GRAY
+        )
+        T_otsu = mahotas.otsu(blurreddsregion)
+        mask = np.zeros_like(blurreddsregion)
+        mask[blurreddsregion < T_otsu] = 1
 
         for patchsize in [128, 256, 512, 1024]:
 
             logger.debug(
                 f'patchsize: {patchsize}'
             )
-            slide = self.load_slide()
-
-            dslevel = slide.level_count - 1
-            maxcoord = Coord(*slide.level_dimensions[0])
-            dscoord = Coord(*slide.level_dimensions[-1])
-
-            downsample = slide.level_downsamples[-1]
-
-            logger.debug('Reading region')
-            dsregion = np.array(
-                slide.read_region((0, 0), dslevel, (dscoord.y, dscoord.x))
-            )
-
-            logger.debug('Performing GaussianBlur')
-            blurreddsregion = cv2.GaussianBlur(dsregion, (51, 51), 0)
-            blurreddsregion = cv2.cvtColor(
-                blurreddsregion, cv2.COLOR_BGR2GRAY
-            )
-            T_otsu = mahotas.otsu(blurreddsregion)
-
-            mask = np.zeros_like(blurreddsregion)
-            mask[blurreddsregion < T_otsu] = 255
-
-            # Downsampled Patch Size
             dsps = np.round(patchsize / downsample).astype(int)
+            limitcoord = Coord(*dsregion.shape[:2]) / dsps
 
-            limitcoord = maxcoord / patchsize
-
+            logger.debug('Computing downsampled centers')
+            dscentercoords = [
+                Coord(
+                    int(dsps/2 + i*dsps),
+                    int(dsps/2 + j*dsps)
+                )
+                for i in range(limitcoord.x - 1)
+                for j in range(limitcoord.y - 1)
+            ]
             logger.debug('Computing mask coordinates')
 
-            coords = [
-                Coord(int(dsps/2 + i*dsps), int(dsps/2 + j*dsps))
-                for i in range(limitcoord.x) for j in range(limitcoord.y)
-            ]
+            assert (
+                dscentercoords[-1].x < mask.shape[0] and
+                dscentercoords[-1].y < mask.shape[1]
+            )
 
-            mask_coords = [
-                coord * downsample
-                for coord in coords
-                if mask[coord.y, coord.x] > 0
-            ]
+            mask_centers = list(filter(
+                lambda c: mask[c.x, c.y] == 1,
+                dscentercoords
+            ))
             tile_generator = DeepZoomGenerator(
                 slide, tile_size=patchsize, overlap=0, limit_bounds=False
             )
@@ -131,55 +158,117 @@ class Image():
                 f'Saving patches for {self.imageID} patchsize: {patchsize}'
             )
 
-            N = len(mask_coords)
-            tiles = np.zeros((patchsize, patchsize, 3, N), dtype=np.uint8)
+            N = len(mask_centers)
+            # tiles = np.zeros((patchsize, patchsize, 3, N), dtype=np.uint8)
             logger.debug('Retrieving tiles')
-            for (i, coord) in tqdm(list(enumerate(mask_coords))):
+
+            assert (mask_centers[-1] * downsample) / patchsize <\
+                Coord(*tile_generator.level_tiles[-1])
+
+            valid_coords = []
+            for (i, coord) in tqdm(list(enumerate(mask_centers))):
                 tile = np.array(
                     tile_generator.get_tile(
-                        level_count, (coord.x / patchsize, coord.y / patchsize)
+                        level_count, (
+                            (downsample * coord.x) / patchsize,
+                            (downsample * coord.y) / patchsize)
                     )
                 )
-                tiles[:, :, :, i] = tile
-
-            percent_whitespace = (
-                tiles.reshape(-1, tiles.shape[-1]) > T_otsu
-            ).sum(0) / np.prod(tiles.shape[:-1])
-            selection = percent_whitespace < 0.25
-            n = sum(selection)
-            selected_tiles = tiles[:, :, :, selection]
-            logger.debug(
-                f"Selected {n} tiles out of {N} ({n/N:0.2}) with percent whitespace < 0.25"
+                if ((tile > T_otsu).sum() / np.prod(tile.shape)) < 0.25:
+                    valid_coords.append(coord)
+            n = len(valid_coords)
+            valid_coords = np.array(
+                [c.to_array() for c in valid_coords]
             )
-            carray = h5file.create_carray(
-                '/', f'Size{patchsize}', atom,
-                (patchsize, patchsize, 3, selected_tiles.shape[-1])
-            )
-            carray[:, :, :, :] = selected_tiles
+            logger.debug((
+                f"Selected {n} tiles out of {N} ({n/N:0.2})"
+                "with percent whitespace < 0.25"
+            ))
+            if n > 0:
+                carray = patchcoordsfile.create_carray(
+                    '/', f'Size{patchsize}', atom,
+                    (n, 2)
+                )
+                carray[:, :] = valid_coords
+        patchcoordsfile.close()
+        return True
 
+    def get_patches(self, s, n):
+        """Generate a set of patches with size s and of length n"""
+        patchcoordsfile = self.get_patchcoordsfile() if not self.patchcoordsfile\
+                        else self.patchcoordsfile
+        coords = [
+            Coord(*c) for c in patchcoordsfile.get_node(f'/Size{s}').read()
+        ]
+        replace = len(coords) < n
+        coords_choice = np.random.choice(coords, n, replace=replace)
+        slide = self.get_slide()
+        patches = generate_patches(slide, coords_choice, s)
+        return patches
+
+
+def generate_patches(slide, coords, s):
+
+    n = len(coords)
+    patches = np.zeros((n, s, s, 3), dtype=np.float16)
+    downsample = slide.level_downsamples[-1]
+
+    for (i, coord) in enumerate(coords):
+        tile_generator = DeepZoomGenerator(
+            slide, tile_size=s, overlap=0, limit_bounds=False
+        )
+        level_count = tile_generator.level_count - 1
+        tile = tile_generator.get_tile(
+            level_count, (
+                (downsample * coord.x) / s,
+                (downsample * coord.y) / s)
+        )
+        patch = np.array(tile)
+        ppatch = process(patch)
+        patches[i, :, :, :] = ppatch
+    return patches
+
+
+def process(image):
+    s = image.shape[0]
+    pimage = np.reshape(image, (1, s, s, 3))
+    pimage = ((255 - pimage) / 255).astype(np.float16)
+    return pimage
+
+
+def deprocess(pimage):
+    image = np.squeeze(pimage)
+    image = 255 - (image * 255).astype(np.uint8)
+    return image
 
 
 class Coord():
-    def __init__(self, y, x):
+    def __init__(self, x, y):
         self.x = x
         self.y = y
 
     def __mul__(self, other):
         return Coord(
-            np.round(self.y*other).astype(int),
-            np.round(self.x*other).astype(int)
+            np.round(self.x * other).astype(int),
+            np.round(self.y * other).astype(int)
         )
 
     def __truediv__(self, other):
         assert other != 0
         return Coord(
-            np.round(self.y / other).astype(int),
-            np.round(self.x / other).astype(int)
+            np.round(self.x / other).astype(int),
+            np.round(self.y / other).astype(int)
         )
-
 
     def __repr__(self):
         return f"<Coord:X{self.x}Y{self.y}>"
+
+    def __lt__(self, other):
+        return (self.x < other.x and self.y < other.y)
+
+    def to_array(self):
+        return np.array([self.x, self.y])
+
 
 class ID():
     def __init__(self, GTExID):
@@ -210,7 +299,10 @@ class Sample():
         self.annotations = row['SMPTHNTS']
 
     def __repr__(self):
-        return f"Sample:{self.tissue[:5]}|ID:{self.ID.donor}-{self.ID.sample}-{self.ID.aliquot}"
+        return (
+            f"Sample:{self.tissue[:5]}|"
+            f"ID:{self.ID.donor}-{self.ID.sample}-{self.ID.aliquot}"
+        )
 
     def get_image(self):
         return Image(self.imageID)
@@ -220,7 +312,9 @@ class Sample():
 
     def has_expression(self):
 
-        expressionID = f"GTEX-{self.ID.donor}-{self.ID.sample}-SM-{self.ID.aliquot}"
+        expressionID = (
+            f"GTEX-{self.ID.donor}-{self.ID.sample}-SM-{self.ID.aliquot}"
+        )
 
         return expressionID in Collection.expressionIDs
 
@@ -236,8 +330,8 @@ class Donor():
         return f"<Donor:{self.donorID}>"
 
     def get_samples(self):
-        return Annotations.sample[
-            Annotations.sample['SAMPID'].apply(
+        return Annotation.samples[
+            Annotation.samples['SAMPID'].apply(
                 lambda x: ID(x).donor, 1
             ) == self.donorID
         ].apply(Sample, axis=1)
@@ -246,20 +340,36 @@ class Donor():
         raise NotImplementedError
 
 
-class Annotations():
-    sample = pd.read_csv(
+class Annotation():
+    samples = pd.read_csv(
         TXT_PATH + 'GTEx_v7_Annotations_SampleAttributesDS.txt',
         sep='\t'
     )
-    subject = pd.read_csv(
+    subjects = pd.read_csv(
         TXT_PATH + 'GTEx_v7_Annotations_SubjectPhenotypesDS.txt',
         sep='\t'
     )
 
+def get_images_with_samples():
+    filepath = CACHE_PATH + 'images_with_samples.py'
+    logger.debug('Loading images with samples from cache')
+    if isfile(filepath):
+        images_with_samples = pickle.load(open(filepath, 'rb'))
+        return images_with_samples
+    else:
+        logger.debug('Retrieving images_with_samples')
+        images_with_samples = []
+        for image in tqdm(Collection.images):
+            if image.has_sample():
+                sample = image.get_sample()
+                images_with_samples.append(sample)
+        pickle.dump(images_with_samples, open(filepath, 'wb'))
+        return images_with_samples
+
 
 class Collection():
-
-    samples = Annotations.sample.apply(Sample, axis=1)
+    samples = Annotation.samples.apply(Sample, axis=1)
+    sample_imageIDs = [s.imageID for s in samples]
 
     with open(TXT_PATH + 'image_ids.txt') as image_file:
         imageIDs = image_file.read().splitlines()
@@ -269,8 +379,61 @@ class Collection():
         'txt/expressionIDs.txt', sep=','
     ).values.flatten()
 
+    images_with_samples = get_images_with_samples()
+
+
     @staticmethod
     def where(collection, condition):
-        logger.debug('Subsetting collection')
         selection = list(filter(condition, eval(f"Collection.{collection}")))
         return sorted(selection, key=lambda x: x.ID.donor)
+
+
+class ToyData():
+    tissue_counts = Counter(
+        map(lambda x: x.tissue, Collection.images_with_samples)
+    ).most_common(6)
+    images = {}
+
+    for tissue, count in tissue_counts:
+        tissue_samples = Collection.where(
+            'samples', lambda s, tissue=tissue: (
+                s.tissue == tissue and
+                s.has_image() and
+                s.has_expression()
+            )
+        )
+        tissue_images = [x.get_image() for x in tissue_samples][:10]
+        images[tissue] = tissue_images
+
+    @staticmethod
+    def download():
+        for tissue, images in ToyData.images.items():
+            logger.debug(f'Downloading {tissue} images')
+            results = [image.download() for image in images]
+            assert all(results), "Some images failed to download"
+
+    @staticmethod
+    def get_patchcoordfiles():
+        for tissue, images in ToyData.images.items():
+            logger.debug(f'Generating patches for {tissue}')
+            results = [image.get_patch_coords() for image in images]
+            assert all(results), "Some patches failed to generate"
+
+    @staticmethod
+    def generate_patchset():
+        logger.debug(f'Generating patchset for ToyData')
+        s = 128
+        n = 100
+        images = ToyData.images
+        T = len(images.keys())
+        i = 0
+        k = 10
+        patchset = np.zeros((T * n * k, s, s, 3), dtype=np.float16)
+        with tqdm(total=T * n * k, unit='B') as pbar:
+            for (t, tissue) in enumerate(images.keys()):
+                logger.debug(f'Retrieving patches for {tissue}')
+                for image in images[tissue]:
+                    patches = image.get_patches(s, n)
+                    patchset[i*n:i*n + n, :, :, :] = patches
+                    pbar.update(n)
+                i += 1
