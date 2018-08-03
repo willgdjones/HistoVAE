@@ -420,10 +420,8 @@ class ToyData():
             assert all(results), "Some patches failed to generate"
 
     @staticmethod
-    def generate_patchset():
+    def generate_patchset(s, n):
         logger.debug(f'Generating patchset for ToyData')
-        s = 128
-        n = 100
         images = ToyData.images
         T = len(images.keys())
         i = 0
@@ -434,6 +432,8 @@ class ToyData():
                 logger.debug(f'Retrieving patches for {tissue}')
                 for image in images[tissue]:
                     patches = image.get_patches(s, n)
-                    patchset[i*n:i*n + n, :, :, :] = patches
                     pbar.update(n)
+                    # yield patches
+                    patchset[i*n:i*n + n, :, :, :] = patches
                 i += 1
+        return patchset

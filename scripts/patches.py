@@ -1,17 +1,7 @@
 import sys
 import logging
-from openslide.deepzoom import DeepZoomGenerator
-import cv2
-import mahotas
 import click
-import numpy as np
-import matplotlib.pyplot as plt
-from collections import namedtuple
 sys.path.append('.')
-from src.classes import Annotation, Collection, Coord, ToyData
-from joblib import Parallel, delayed
-from tqdm import tqdm
-from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +12,6 @@ logger = logging.getLogger(__name__)
 )
 def main(dataset):
     logger.info('Initializing patches script')
-    dataset = eval(dataset)
     eval(dataset).get_patch_coords()
 
 
