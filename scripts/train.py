@@ -1,44 +1,66 @@
 import sys
-import logging
-from openslide.deepzoom import DeepZoomGenerator
-import cv2
-import mahotas
+import requests.packages.urllib3
 import click
-import numpy as np
-import matplotlib.pyplot as plt
-from collections import namedtuple
+import os
+import logging
+requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
-from src.classes import (
-    Annotation, Collection, Coord, ToyData
-)
-from joblib import Parallel, delayed
-from tqdm import tqdm
+from src.classes import ToyData
+from src.models import ConvolutionalAutoencoder
 
 logger = logging.getLogger(__name__)
 
 
 @click.command()
 @click.option(
-    '--dataset', default='ToyData',
-    help="Dataset to use"
+    '--datasetname', default='ToyData',
+    help="Number of images to download"
 )
-def main(dataset):
-    logger.info('Initializing train script')
-    dataset = eval(dataset)
-    patchset = dataset.generate_patchset()
+@click.option(
+    '--modelname', default='ConvolutionalAutoencoder',
+    help="Number of images to download"
+)
+@click.option(
+    '--dim', default=128,
+    help=(
+        "Dimension of the inner vector"
+        "Only relevant to deep learning models"
+    )
+)
+@click.option(
+    '--epochs', default=20,
+    help=(
+        "Number of epochs"
+    )
+)
+@click.option(
+    '--patchsize', default=128,
+    help="Patchsize to use"
+)
+def main(datasetname, modelname, dim, patchsize, epochs):
+    os.makedirs('data/images', exist_ok=True)
+    dataset = eval(datasetname)
+    Model = eval(modelname)
+    logger.info('Initializing download script')
+    batchsize = 50
+    train_gen, val_gen, split =\
+        dataset.generators(patchsize, batchsize)
+    n = dataset.T * dataset.k * batchsize
 
-
-
-    import pdb; pdb.set_trace()
-
+    m = Model(
+        dim=dim, patchsize=patchsize
+    )
+    m.train(
+        train_gen, val_gen, split,
+        n, batchsize, epochs
+    )
 
 if __name__ == '__main__':
     logging.basicConfig(
-        filename='logs/trainlog.conf',
-        level=logging.DEBUG,
+        filename='logs/train.conf', level=logging.DEBUG,
         format=(
-            "%(asctime)s | %(name)s | %(processName)s |"
-            "%(levelname)s: %(message)s"
+            "%(asctime)s | %(name)s | %(processName)s"
+            " | %(levelname)s: %(message)s"
         )
     )
     main()

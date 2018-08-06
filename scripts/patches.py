@@ -17,7 +17,7 @@ def main(dataset):
 
 if __name__ == '__main__':
     logging.basicConfig(
-        filename='logs/patcheslog.conf', level=logging.DEBUG,
+        filename='logs/patches.log', level=logging.DEBUG,
         format=(
             "%(asctime)s | %(name)s | %(processName)s |"
             "%(levelname)s: %(message)s"

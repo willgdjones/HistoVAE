@@ -10,9 +10,8 @@ from openslide.deepzoom import DeepZoomGenerator
 import numpy as np
 from tqdm import tqdm
 from tables import open_file, Atom, Filters
-import matplotlib.pyplot as plt
 from collections import Counter
-
+from itertools import cycle
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +96,8 @@ class Image():
         )
         filters = Filters(complib='zlib', complevel=5)
         patchcoordsfile = open_file(
-            self.patchcoordsfilepath, mode='w', title=f'{self.imageID} patches',
+            self.patchcoordsfilepath, mode='w',
+            title=f'{self.imageID} patches',
             filters=filters
         )
 
@@ -195,10 +195,12 @@ class Image():
 
     def get_patches(self, s, n):
         """Generate a set of patches with size s and of length n"""
-        patchcoordsfile = self.get_patchcoordsfile() if not self.patchcoordsfile\
-                        else self.patchcoordsfile
+        patchcoordsfile = self.get_patchcoordsfile()\
+            if not self.patchcoordsfile else self.patchcoordsfile
         coords = [
-            Coord(*c) for c in patchcoordsfile.get_node(f'/Size{s}').read()
+            Coord(*c) for c in patchcoordsfile.get_node(
+                f'/Size{s}'
+            ).read()
         ]
         replace = len(coords) < n
         coords_choice = np.random.choice(coords, n, replace=replace)
@@ -350,6 +352,7 @@ class Annotation():
         sep='\t'
     )
 
+
 def get_images_with_samples():
     filepath = CACHE_PATH + 'images_with_samples.py'
     logger.debug('Loading images with samples from cache')
@@ -381,7 +384,6 @@ class Collection():
 
     images_with_samples = get_images_with_samples()
 
-
     @staticmethod
     def where(collection, condition):
         selection = list(filter(condition, eval(f"Collection.{collection}")))
@@ -392,8 +394,10 @@ class ToyData():
     tissue_counts = Counter(
         map(lambda x: x.tissue, Collection.images_with_samples)
     ).most_common(6)
-    images = {}
+    T = len(tissue_counts)
 
+    k = 10
+    images = {}
     for tissue, count in tissue_counts:
         tissue_samples = Collection.where(
             'samples', lambda s, tissue=tissue: (
@@ -402,7 +406,7 @@ class ToyData():
                 s.has_expression()
             )
         )
-        tissue_images = [x.get_image() for x in tissue_samples][:10]
+        tissue_images = [x.get_image() for x in tissue_samples][:k]
         images[tissue] = tissue_images
 
     @staticmethod
@@ -420,20 +424,40 @@ class ToyData():
             assert all(results), "Some patches failed to generate"
 
     @staticmethod
-    def generate_patchset(s, n):
+    def generators(s, n, split=0.2):
         logger.debug(f'Generating patchset for ToyData')
         images = ToyData.images
-        T = len(images.keys())
-        i = 0
-        k = 10
-        patchset = np.zeros((T * n * k, s, s, 3), dtype=np.float16)
-        with tqdm(total=T * n * k, unit='B') as pbar:
-            for (t, tissue) in enumerate(images.keys()):
-                logger.debug(f'Retrieving patches for {tissue}')
-                for image in images[tissue]:
+        train, val = train_val_split(images, split)
+
+        def train_gen():
+            for (t, tissue) in enumerate(train.keys()):
+                for image in train[tissue]:
                     patches = image.get_patches(s, n)
-                    pbar.update(n)
-                    # yield patches
-                    patchset[i*n:i*n + n, :, :, :] = patches
-                i += 1
-        return patchset
+                    yield patches, patches
+
+        def val_gen():
+            for (t, tissue) in enumerate(val.keys()):
+                for image in val[tissue]:
+                    patches = image.get_patches(s, n)
+                    yield patches, patches
+
+        return train_gen, val_gen, split
+
+
+def train_val_split(data, split):
+    train = {}
+    val = {}
+    for (t, tissue) in enumerate(data.keys()):
+
+        train[tissue] = []
+        val[tissue] = []
+        images = np.array(data[tissue])
+        k = len(images)
+        ch = np.floor(k * split).astype(int)
+        val_idx = np.random.choice(range(k), ch, replace=False)
+        train_idx = np.array(list(
+            set(range(k)) - set(val_idx)
+        ))
+        train[tissue].extend(images[train_idx].tolist())
+        val[tissue].extend(images[val_idx].tolist())
+    return train, val

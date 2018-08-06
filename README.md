@@ -20,4 +20,4 @@ Each sample in the ToyData has annotated genetic and expression data.
 Much of the tissue image is whitespace. We segment the foreground and background of the tissue slice using an Otsu threshold. We sample square pixel patches of sizes 128, 256, 512 and 2014 pixels, and ensure that no more than 25% of the patches is whitespace. We store the coordinates of the selected patches in `data/patches`. Using these coordinates, and knowing the patch size, we can efficiently retrieve patches at any level from the image using the [OpenSlide DeepZoomGenerator](#https://openslide.org/api/python/#module-openslide.deepzoom).
 
 ## Training an Autoencoder
-We train a Convolutional Autoencoder 
+We train a Convolutional Autoencoder
