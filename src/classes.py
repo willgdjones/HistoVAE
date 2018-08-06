@@ -33,6 +33,7 @@ class Image():
         return f"<Image:{self.ID.donor}-{self.ID.sample}>"
 
     def has_sample(self):
+        import pdb; pdb.set_trace()
         return self.imageID in set(Collection.sample_imageIDs)
 
     def get_sample(self):
@@ -364,7 +365,6 @@ class Collection():
     expressionIDs = pd.read_csv(
         'txt/expressionIDs.txt', sep=','
     ).values.flatten()
-
 
     filepath = CACHE_PATH + 'images_with_samples.py'
     logger.debug('Loading images with samples from cache')
