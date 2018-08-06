@@ -2,7 +2,6 @@ docs/
 *.pyc
 __pycache__
 data/
-txt/
 logs/
 .cache/
 models/
