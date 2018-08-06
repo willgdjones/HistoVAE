@@ -365,23 +365,22 @@ class Collection():
         'txt/expressionIDs.txt', sep=','
     ).values.flatten()
 
-    def get_images_with_samples():
-        filepath = CACHE_PATH + 'images_with_samples.py'
-        logger.debug('Loading images with samples from cache')
-        if isfile(filepath):
-            images_with_samples = pickle.load(open(filepath, 'rb'))
-            return images_with_samples
-        else:
-            logger.debug('Retrieving images_with_samples')
-            images_with_samples = []
-            for image in tqdm(Collection.images):
-                if image.has_sample():
-                    sample = image.get_sample()
-                    images_with_samples.append(sample)
-            pickle.dump(images_with_samples, open(filepath, 'wb'))
-            return images_with_samples
 
-    images_with_samples = get_images_with_samples()
+    filepath = CACHE_PATH + 'images_with_samples.py'
+    logger.debug('Loading images with samples from cache')
+    if isfile(filepath):
+        images_with_samples = pickle.load(open(filepath, 'rb'))
+    else:
+        logger.debug('Retrieving images_with_samples')
+        images_with_samples = []
+        for image in tqdm(images):
+            if image.has_sample():
+                sample = image.get_sample()
+                images_with_samples.append(sample)
+        pickle.dump(images_with_samples, open(filepath, 'wb'))
+        images_with_samples
+
+    # images_with_samples = get_images_with_samples()
 
     @staticmethod
     def where(collection, condition):
