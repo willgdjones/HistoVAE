@@ -33,7 +33,6 @@ class Image():
         return f"<Image:{self.ID.donor}-{self.ID.sample}>"
 
     def has_sample(self):
-        import pdb; pdb.set_trace()
         return self.imageID in set(Collection.sample_imageIDs)
 
     def get_sample(self):
@@ -366,6 +365,13 @@ class Collection():
         'txt/expressionIDs.txt', sep=','
     ).values.flatten()
 
+    @staticmethod
+    def where(collection, condition):
+        selection = list(filter(condition, eval(f"Collection.{collection}")))
+        return sorted(selection, key=lambda x: x.ID.donor)
+
+
+def get_images_with_samples():
     filepath = CACHE_PATH + 'images_with_samples.py'
     logger.debug('Loading images with samples from cache')
     if isfile(filepath):
@@ -373,20 +379,13 @@ class Collection():
     else:
         logger.debug('Retrieving images_with_samples')
         images_with_samples = []
-        for image in tqdm(images):
+        for image in tqdm(Collection.images):
             if image.has_sample():
                 sample = image.get_sample()
                 images_with_samples.append(sample)
         pickle.dump(images_with_samples, open(filepath, 'wb'))
-        images_with_samples
 
-    # images_with_samples = get_images_with_samples()
-
-    @staticmethod
-    def where(collection, condition):
-        selection = list(filter(condition, eval(f"Collection.{collection}")))
-        return sorted(selection, key=lambda x: x.ID.donor)
-
+Collection.images_with_samples = get_images_with_samples()
 
 class ToyData():
     tissue_counts = Counter(
