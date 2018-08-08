@@ -2,17 +2,19 @@ import sys
 import logging
 import click
 sys.path.append('.')
+from src.classes import Collection, ToyData
 
 logger = logging.getLogger(__name__)
 
 @click.command()
 @click.option(
-    '--dataset', default='ToyData',
+    '--datasetname', default='ToyData',
     help="Dataset to use"
 )
-def main(dataset):
+def main(datasetname):
     logger.info('Initializing patches script')
-    eval(dataset).get_patch_coords()
+    dataset = eval(datasetname)
+    dataset.get_patch_coords()
 
 
 if __name__ == '__main__':
