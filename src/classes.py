@@ -384,6 +384,7 @@ def get_images_with_samples():
                 sample = image.get_sample()
                 images_with_samples.append(sample)
         pickle.dump(images_with_samples, open(filepath, 'wb'))
+    return images_with_samples
 
 Collection.images_with_samples = get_images_with_samples()
 
