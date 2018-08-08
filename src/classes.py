@@ -87,7 +87,7 @@ class Image():
         return patchcoordsfile
 
     def generate_patchcoords(self):
-        if self.has_patches():
+        if self.has_patchcoords():
             patchcoordsfile = self.get_patchcoordsfile()
             return patchcoordsfile
 
@@ -418,7 +418,7 @@ class ToyData():
     def get_patchcoordfiles():
         for tissue, images in ToyData.images.items():
             logger.debug(f'Generating patches for {tissue}')
-            results = [image.get_patch_coords() for image in images]
+            results = [image.generate_patchcoords() for image in images]
             assert all(results), "Some patches failed to generate"
 
     @staticmethod

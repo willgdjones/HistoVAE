@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def main(datasetname):
     logger.info('Initializing patches script')
     dataset = eval(datasetname)
-    dataset.get_patch_coords()
+    dataset.get_patchcoordfiles()
 
 
 if __name__ == '__main__':
