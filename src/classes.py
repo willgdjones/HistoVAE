@@ -445,7 +445,7 @@ class ToyData():
 
         train_patches_data = []
         train_imageIDs_data = []
-        for (t, tissue) in enumerate(train.keys()):
+        for (t, tissue) in tqdm(enumerate(train.keys())):
             for image in images[tissue]:
                 patches = image.get_patches(s, n)
                 imageIDs = [image.imageID] * n
@@ -454,7 +454,7 @@ class ToyData():
 
         val_patches_data = []
         val_imageIDs_data = []
-        for (t, tissue) in enumerate(val.keys()):
+        for (t, tissue) in tqdm(enumerate(val.keys())):
             for image in images[tissue]:
                 patches = image.get_patches(s, n)
                 imageIDs = [image.imageID] * n
