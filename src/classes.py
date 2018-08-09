@@ -394,7 +394,7 @@ class ToyData():
     ).most_common(6)
     T = len(tissue_counts)
 
-    K = 10
+    K = 1
     images = {}
     for tissue, count in tissue_counts:
         tissue_samples = Collection.where(
