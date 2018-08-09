@@ -22,12 +22,12 @@ class ConvolutionalAutoencoder():
 
     def encode(self, input_img):
         x = Conv2D(
-            32, (3, 3), activation='relu',
+            64, (3, 3), activation='relu',
             padding='same'
         )(input_img)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            32, (3, 3), activation='relu',
+            64, (3, 3), activation='relu',
             padding='same'
         )(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
@@ -39,7 +39,7 @@ class ConvolutionalAutoencoder():
 
         encoded = Dense(
             self.dim,
-            activity_regularizer='l2'
+            activity_regularizer='l1'
         )(x)
         return encoded
 
@@ -47,12 +47,12 @@ class ConvolutionalAutoencoder():
         x = Dense(self.middle_dim)(input)
         x = Reshape(self.middle_tensor_shape)(x)
         x = Conv2D(
-            32, (3, 3), activation='relu',
+            64, (3, 3), activation='relu',
             padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
-            32, (3, 3),
+            64, (3, 3),
             activation='relu', padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
@@ -62,9 +62,9 @@ class ConvolutionalAutoencoder():
         )(x)
         return decoded
 
-    def train(self, train_gen,
-                      val_gen, split,
-                      N, b, epochs):
+    def train_on_data(self, train_data, val_data,
+                      batch_size, epochs):
+
         input_img = Input(
             shape=(
                 self.patchsize,
@@ -72,6 +72,43 @@ class ConvolutionalAutoencoder():
                 3
             )
         )
+        model = Model(
+            input_img,
+            self.decode(self.encode(input_img))
+        )
+        model.compile(
+            optimizer='adadelta',
+            loss='binary_crossentropy',
+        )
+
+        logger.debug('Fitting model')
+        model.fit(
+            train_data,
+            validation_data=val_data,
+            batch_size=batch_size,
+            epochs=epochs,
+            callbacks=[
+                TensorBoard(
+                    log_dir=(
+                        './tensorboardlogs'
+                    ),
+                    histogram_freq=1
+                ),
+            ],
+            shuffle=True
+        )
+        self.model = model
+
+    def train_on_generator(self, train_gen, val_gen,
+                           split, N, batchsize, epochs):
+        input_img = Input(
+            shape=(
+                self.patchsize,
+                self.patchsize,
+                3
+            )
+        )
+        self.N = N
         logger.debug('Building model')
         model = Model(
             input_img,
@@ -105,11 +142,11 @@ class ConvolutionalAutoencoder():
             validation_data=cycle(val_gen()),
             steps_per_epoch=(
                 (1 - split) * N
-            ) / b,
+            ) / batchsize,
             epochs=epochs,
             validation_steps=(
                 split * N
-            ) / b,
+            ) / batchsize,
             callbacks=[
                 TensorBoard(
                     log_dir=(
@@ -124,4 +161,10 @@ class ConvolutionalAutoencoder():
             ]
             # use_multiprocessing=True
         )
-        model.save('models/test.pkl')
+        self.model = model
+
+    def save(self):
+        assert self.model, "Model must be trained first"
+        self.model.save(
+            'models/CA_{self.patchsize}_{self.N},pkl'
+        )

@@ -1,10 +1,12 @@
 import sys
 import logging
 import click
+import os
 sys.path.append('.')
 from src.classes import Collection, ToyData
 
 logger = logging.getLogger(__name__)
+
 
 @click.command()
 @click.option(
@@ -12,6 +14,7 @@ logger = logging.getLogger(__name__)
     help="Dataset to use"
 )
 def main(datasetname):
+    os.makedirs('data/patches', exist_ok=True)
     logger.info('Initializing patches script')
     dataset = eval(datasetname)
     dataset.get_patchcoordfiles()
