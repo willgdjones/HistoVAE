@@ -404,7 +404,7 @@ class ToyData():
                 s.has_expression()
             )
         )
-        tissue_images = [x.get_image() for x in tissue_samples][:k]
+        tissue_images = [x.get_image() for x in tissue_samples][:K]
         images[tissue] = tissue_images
 
     @staticmethod
