@@ -53,7 +53,7 @@ def main(datasetname, modelname, dim, patchsize, epochs, n_patches):
     logger.debug('Initializing download script')
     batch_size = 128
 
-    N = dataset.T * dataset.k * batch_size
+    N = dataset.T * dataset.K * batch_size
 
     m = Model(
         dim=dim, patchsize=patchsize
@@ -61,7 +61,7 @@ def main(datasetname, modelname, dim, patchsize, epochs, n_patches):
 
     train_patches_data, train_imageIDs_data, val_patches_data,\
         val_imageIDs_data, split = dataset.training_data(
-                                                patchsize, n_patches
+                                                patchsize, int(n_patches)
                                             )
     combined_train_data = zip(train_patches_data, train_imageIDs_data)
     combined_val_data = zip(val_patches_data, val_imageIDs_data)
