@@ -89,6 +89,8 @@ class ConvolutionalAutoencoder():
                       params, split=0.2):
 
         N = patches_data.shape[0]
+        self.params = params
+        self.params['N'] = N
         input_img = Input(
             shape=(
                 self.patchsize,
@@ -221,5 +223,10 @@ class ConvolutionalAutoencoder():
     def save(self):
         assert self.model, "Model must be trained first"
         self.model.save(
-            f'models/CA_ps{self.patchsize}_n{self.N}_e{self.epochs}.pkl'
+            (   "models/"
+                f"CA_ps{self.params['patchsize']}_"
+                f"n{self.params['N']}_e{self.epochs}"
+                f"lr{self.params['lr']}_bs{self.batch_size}"
+                ".pkl"
+            )
         )
