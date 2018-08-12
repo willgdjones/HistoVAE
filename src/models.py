@@ -125,8 +125,7 @@ class ConvolutionalAutoencoder():
                 TensorBoard(
                     log_dir=(
                         './tensorboardlogs'
-                    ),
-                    histogram_freq=1
+                    )
                 ),
             ],
         )
