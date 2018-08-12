@@ -87,10 +87,6 @@ class ConvolutionalAutoencoder():
                       batch_size, epochs, split=0.2):
 
         N = patches_data.shape[0]
-        checkpoint = int(N * (1 - split))
-        train_patches = patches_data[:checkpoint, :, :, :]
-        val_patches = patches_data[checkpoint:, :, :, :]
-
         input_img = Input(
             shape=(
                 self.patchsize,
@@ -110,42 +106,58 @@ class ConvolutionalAutoencoder():
             loss='mean_squared_error',
         )
 
-        logger.debug('Fitting model')
-        train_datagen = ImageDataGenerator(
+        datagen = ImageDataGenerator(
             horizontal_flip=True,
             vertical_flip=True
         )
-        val_datagen = ImageDataGenerator()
 
-        for e in range(epochs):
-            print('Epoch', e)
-            batches = 0
-            pbar = tqdm(len(patches_data) / batch_size)
-            for (x_train_batch, y_train_batch), (x_val_batch, y_val_batch) in\
-                zip(
-                    train_datagen.flow(
-                        train_patches, train_patches, batch_size=batch_size
-                    ),
-                    val_datagen.flow(
-                        val_patches, val_patches, batch_size=batch_size)
-                    ):
-                model.fit(
-                    train_patches, train_patches,
-                    validation_data=(val_patches, val_patches),
-                    batch_size=batch_size,
-                    callbacks=[
-                        TensorBoard(
-                            log_dir=(
-                                './tensorboardlogs'
-                            ),
-                            histogram_freq=1
-                        ),
-                    ],
-                )
-                pbar.update(1)
-                batches += 1
-                if batches >= len(patches_data) / batch_size:
-                    break
+        logger.debug('Fitting model')
+        model.fit_generator(
+            datagen.flow(
+                patches_data, patches_data, batch_size=batch_size
+            ),
+            steps_per_epoch=N / batch_size, epochs=epochs
+        )
+
+
+        # checkpoint = int(N * (1 - split))
+        # train_patches = patches_data[:checkpoint, :, :, :]
+        # val_patches = patches_data[checkpoint:, :, :, :]
+        # train_datagen = ImageDataGenerator(
+        #     horizontal_flip=True,
+        #     vertical_flip=True
+        # )
+        # val_datagen = ImageDataGenerator()
+        #
+        # for e in range(epochs):
+        #     print('Epoch', e)
+        #     batches = 0
+        #     pbar = tqdm(len(patches_data) / batch_size)
+        #     for (x_train_batch, y_train_batch), (x_val_batch, y_val_batch) in\
+        #         zip(
+        #             train_datagen.flow(
+        #                 train_patches, train_patches, batch_size=batch_size
+        #             ),
+        #             val_datagen.flow(
+        #                 val_patches, val_patches, batch_size=batch_size)
+        #             ):
+        #         model.fit(
+        #             train_patches, train_patches,
+        #             validation_data=(val_patches, val_patches),
+        #             batch_size=batch_size,
+        #             callbacks=[
+        #                 TensorBoard(
+        #                     log_dir=(
+        #                         './tensorboardlogs'
+        #                     ),
+        #                     histogram_freq=1
+        #                 ),
+        #             ],
+        #         )
+        #         pbar.update(1)
+        #         batches += 1
+        #         if batches >= len(patches_data) / batch_size:
+        #             break
         self.model = model
 
     def train_on_generator(self, train_gen, val_gen,
