@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 from tables import open_file, Atom, Filters
 from collections import Counter
-from itertools import cycle
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -394,7 +394,7 @@ class ToyData():
     ).most_common(6)
     T = len(tissue_counts)
 
-    K = 1
+    K = 10
     images = {}
     for tissue, count in tissue_counts:
         tissue_samples = Collection.where(
@@ -420,6 +420,33 @@ class ToyData():
             logger.debug(f'Generating patches for {tissue}')
             results = [image.generate_patchcoords() for image in images]
             assert all(results), "Some patches failed to generate"
+
+    @staticmethod
+    def sample_data(patch_size, n_patches, split=0.2):
+        logger.debug(f'Generating patchset for ToyData')
+        images = ToyData.images
+
+        pbar = tqdm(total=ToyData.T * ToyData.K)
+        patches_data = np.zeros(
+            (ToyData.T * ToyData.K * n_patches, patch_size, patch_size, 3)
+        )
+
+        imageIDs_data = []
+        i = 0
+        for (t, tissue) in enumerate(images.keys()):
+            for (j, image) in enumerate(images[tissue]):
+                patches = image.get_patches(patch_size, n_patches)
+                patches_data[
+                    i * n_patches: i * n_patches + n_patches,
+                    :, :, :
+                ] = patches
+                imageIDs = [image.imageID] * n_patches
+                imageIDs_data.extend(imageIDs)
+                pbar.update(1)
+                i += 1
+        pbar.close()
+
+        return patches_data, np.array(imageIDs_data)
 
     @staticmethod
     def test_data(s, n_patches, split=0.2):

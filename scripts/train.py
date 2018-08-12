@@ -2,9 +2,11 @@ import sys
 import requests.packages.urllib3
 import click
 import os
+from os.path import isfile
 import logging
 import random
 import numpy as np
+import joblib
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
 from src.classes import ToyData
@@ -51,28 +53,34 @@ def main(datasetname, modelname, dim, patchsize, epochs, n_patches):
     dataset = eval(datasetname)
     Model = eval(modelname)
     logger.debug('Initializing download script')
-    batch_size = 128
+    batch_size = 64
 
     N = dataset.T * dataset.K * batch_size
 
     m = Model(
         dim=dim, patchsize=patchsize
     )
+    data_filename = f'.cache/{datasetname}_{patchsize}_{n_patches}.pkl'
+    if isfile(data_filename):
+        logger.debug(f'Loading data from cache')
+        data = joblib.load(open(data_filename, 'rb'))
+    else:
 
-    train_patches_data, train_imageIDs_data, val_patches_data,\
-        val_imageIDs_data, split = dataset.training_data(
-                                                patchsize, int(n_patches)
-                                            )
-    combined_train_data = zip(train_patches_data, train_imageIDs_data)
-    combined_val_data = zip(val_patches_data, val_imageIDs_data)
-    random.shuffle(combined_train_data)
-    random.shuffle(combined_val_data)
-    train_patches_data, train_imageIDs_data = zip(*combined_train_data)
-    val_patches_data, val_imageIDs_data = zip(*combined_val_data)
+        data = dataset.sample_data(patchsize, int(n_patches))
+        logger.debug(f'Saving data to cache')
+        joblib.dump(data, open(data_filename, 'wb'))
+
+    patches_data, imageIDs_data = data
+    N = patches_data.shape[0]
+    assert N == imageIDs_data.shape[0]
+    p = np.random.permutation(N)
+    patches_data, imageIDs_data = patches_data[p], imageIDs_data[p]
 
     m.train_on_data(
-        train_patches_data, val_patches_data, split, batch_size, epochs
+        patches_data, batch_size, epochs
     )
+
+    m.save()
 
 
 if __name__ == '__main__':
