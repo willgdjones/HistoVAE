@@ -130,7 +130,7 @@ class ConvolutionalAutoencoder():
             callbacks=[
                 TensorBoard(
                     log_dir=(
-                        './tensorboardlogs/{self.name}'
+                        f'./tensorboardlogs/{self.name}'
                     )
                 ),
             ],
