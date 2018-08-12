@@ -55,10 +55,6 @@ logger = logging.getLogger(__name__)
     '--beta_1', default=0.05,
     help="Beta 1 to use"
 )
-@click.option(
-    '--batch_size', default=64,
-    help="Beta 1 to use"
-)
 def main(datasetname, modelname, dim,
          patchsize, epochs, n_patches, lr, beta_1, batch_size, batch_size):
     np.random.seed(42)
