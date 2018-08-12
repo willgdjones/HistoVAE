@@ -17,15 +17,15 @@ logger = logging.getLogger(__name__)
 
 @click.command()
 @click.option(
-    '--datasetname', default='ToyData',
+    '--dataset_name', default='ToyData',
     help="Number of images to download"
 )
 @click.option(
-    '--modelname', default='ConvolutionalAutoencoder',
+    '--model_name', default='ConvolutionalAutoencoder',
     help="Number of images to download"
 )
 @click.option(
-    '--dim', default=128,
+    '--inner_dim', default=512,
     help=(
         "Dimension of the inner vector"
         "Only relevant to deep learning models"
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
     )
 )
 @click.option(
-    '--patchsize', default=128,
+    '--patch_size', default=128,
     help="Patchsize to use"
 )
 @click.option(
@@ -59,26 +59,24 @@ logger = logging.getLogger(__name__)
     '--batch_size', default=64,
     help="Beta 1 to use"
 )
-def main(datasetname, modelname, dim,
-         patchsize, epochs, n_patches, lr, beta_1, batch_size):
+def main(dataset_name, model_name, inner_dim,
+         patch_size, epochs, n_patches, lr, beta_1, batch_size):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
-    dataset = eval(datasetname)
-    Model = eval(modelname)
+    dataset = eval(dataset_name)
+    Model = eval(model_name)
     logger.debug('Initializing download script')
 
     N = dataset.T * dataset.K * batch_size
 
-    m = Model(
-        dim=dim, patchsize=patchsize
-    )
-    data_filename = f'.cache/{datasetname}_{patchsize}_{n_patches}.pkl'
+    m = Model(inner_dim=inner_dim)
+    data_filename = f'.cache/{dataset_name}_{patch_size}_{n_patches}.pkl'
     if isfile(data_filename):
         logger.debug(f'Loading data from cache')
         data = joblib.load(open(data_filename, 'rb'))
     else:
 
-        data = dataset.sample_data(patchsize, int(n_patches))
+        data = dataset.sample_data(patch_size, int(n_patches))
         logger.debug(f'Saving data to cache')
         joblib.dump(data, open(data_filename, 'wb'))
 
@@ -92,7 +90,8 @@ def main(datasetname, modelname, dim,
         'lr': lr,
         'beta_1': beta_1,
         'epochs': epochs,
-        'batch_size': batch_size
+        'batch_size': batch_size,
+        'patch_size': patch_size
     }
 
     m.train_on_data(

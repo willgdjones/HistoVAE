@@ -17,10 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class ConvolutionalAutoencoder():
-    def __init__(self, dim, patchsize):
-        self.dim = dim
-        self.patchsize = patchsize
-        self.name = 'ConvolutionalAutoencoder'
+    def __init__(self, inner_dim):
+        self.inner_dim = inner_dim
 
     def encode(self, input_img):
         x = Conv2D(
@@ -51,7 +49,7 @@ class ConvolutionalAutoencoder():
         x = Flatten()(x)
 
         encoded = Dense(
-            self.dim,
+            self.inner_dim,
             activity_regularizer='l1'
         )(x)
         return encoded
@@ -91,10 +89,16 @@ class ConvolutionalAutoencoder():
         N = patches_data.shape[0]
         self.params = params
         self.params['N'] = N
+
+        self.name = (
+            f"CA_ps{self.params['patch_size']}_"
+            f"n{self.params['N']}_e{self.params['epochs']}"
+            f"lr{self.params['lr']}_bs{self.params['batch_size']}"
+        )
         input_img = Input(
             shape=(
-                self.patchsize,
-                self.patchsize,
+                self.params['patch_size'],
+                self.params['patch_size'],
                 3
             )
         )
@@ -126,11 +130,12 @@ class ConvolutionalAutoencoder():
             callbacks=[
                 TensorBoard(
                     log_dir=(
-                        './tensorboardlogs'
+                        './tensorboardlogs/{}'
                     )
                 ),
             ],
         )
+        self.model = model
 
 
         # checkpoint = int(N * (1 - split))
@@ -171,62 +176,55 @@ class ConvolutionalAutoencoder():
         #         batches += 1
         #         if batches >= len(patches_data) / batch_size:
         #             break
-        self.model = model
 
-    def train_on_generator(self, train_gen, val_gen,
-                           split, N, batchsize, epochs):
-        input_img = Input(
-            shape=(
-                self.patchsize,
-                self.patchsize,
-                3
-            )
-        )
-        self.N = N
-        logger.debug('Building model')
-        model = Model(
-            input_img,
-            self.decode(self.encode(input_img))
-        )
-        logger.debug('Compiling model')
-        model.compile(
-            optimizer='adadelta',
-            loss='binary_crossentropy',
-        )
-        logger.debug('Fitting model')
-        model.fit_generator(
-            cycle(train_gen()),
-            validation_data=cycle(val_gen()),
-            steps_per_epoch=(
-                (1 - split) * N
-            ) / batchsize,
-            epochs=epochs,
-            validation_steps=(
-                split * N
-            ) / batchsize,
-            callbacks=[
-                TensorBoard(
-                    log_dir=(
-                        './tensorboardlogs'
-                    ),
-                    histogram_freq=1
-                ),
-                ModelCheckpoint(
-                    filepath=f'models/{self.name}',
-                    period=5
-                )
-            ]
-            # use_multiprocessing=True
-        )
-        self.model = model
+
+    # def train_on_generator(self, train_gen, val_gen,
+    #                        split, N, batchsize, epochs):
+    #     input_img = Input(
+    #         shape=(
+    #             self.patchsize,
+    #             self.patchsize,
+    #             3
+    #         )
+    #     )
+    #     self.N = N
+    #     logger.debug('Building model')
+    #     model = Model(
+    #         input_img,
+    #         self.decode(self.encode(input_img))
+    #     )
+    #     logger.debug('Compiling model')
+    #     model.compile(
+    #         optimizer='adadelta',
+    #         loss='binary_crossentropy',
+    #     )
+    #     logger.debug('Fitting model')
+    #     model.fit_generator(
+    #         cycle(train_gen()),
+    #         validation_data=cycle(val_gen()),
+    #         steps_per_epoch=(
+    #             (1 - split) * N
+    #         ) / batchsize,
+    #         epochs=epochs,
+    #         validation_steps=(
+    #             split * N
+    #         ) / batchsize,
+    #         callbacks=[
+    #             TensorBoard(
+    #                 log_dir=(
+    #                     './tensorboardlogs'
+    #                 ),
+    #                 histogram_freq=1
+    #             ),
+    #             ModelCheckpoint(
+    #                 filepath=f'models/{self.name}',
+    #                 period=5
+    #             )
+    #         ]
+    #         # use_multiprocessing=True
+    #     )
+    #     self.model = model
 
     def save(self):
         assert self.model, "Model must be trained first"
-        self.model.save(
-            (   "models/"
-                f"CA_ps{self.params['patchsize']}_"
-                f"n{self.params['N']}_e{self.epochs}"
-                f"lr{self.params['lr']}_bs{self.batch_size}"
-                ".pkl"
-            )
-        )
+        self.model.save("models/" + self.name + ".pkl")
