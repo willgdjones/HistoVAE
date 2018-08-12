@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
     )
 )
 @click.option(
-    '--epochs', default=20,
+    '--epochs', default=100,
     help=(
         "Number of epochs"
     )
@@ -47,13 +47,25 @@ logger = logging.getLogger(__name__)
     '--patchsize', default=128,
     help="Patchsize to use"
 )
-def main(datasetname, modelname, dim, patchsize, epochs, n_patches):
+@click.option(
+    '--lr', default=0.0002,
+    help="Learning rate to use"
+)
+@click.option(
+    '--beta_1', default=0.05,
+    help="Beta 1 to use"
+)
+@click.option(
+    '--batch_size', default=64,
+    help="Beta 1 to use"
+)
+def main(datasetname, modelname, dim,
+         patchsize, epochs, n_patches, lr, beta_1, batch_size, batch_size):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
     dataset = eval(datasetname)
     Model = eval(modelname)
     logger.debug('Initializing download script')
-    batch_size = 64
 
     N = dataset.T * dataset.K * batch_size
 
@@ -76,8 +88,15 @@ def main(datasetname, modelname, dim, patchsize, epochs, n_patches):
     p = np.random.permutation(N)
     patches_data, imageIDs_data = patches_data[p], imageIDs_data[p]
 
+    params = {
+        'lr': lr,
+        'beta_1': beta_1,
+        'epochs': epochs,
+        'batch_size': batch_size
+    }
+
     m.train_on_data(
-        patches_data, batch_size, epochs
+        patches_data, params
     )
 
     m.save()

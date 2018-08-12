@@ -23,22 +23,22 @@ class ConvolutionalAutoencoder():
 
     def encode(self, input_img):
         x = Conv2D(
-            64, (3, 3), activation='relu',
+            16, (3, 3), activation='lrelu',
             padding='same'
         )(input_img)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            64, (3, 3), activation='relu',
+            32, (3, 3), activation='lrelu',
             padding='same'
         )(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            64, (3, 3), activation='relu',
+            64, (3, 3), activation='lrelu',
             padding='same'
         )(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            64, (3, 3), activation='relu',
+            128, (3, 3), activation='lrelu',
             padding='same'
         )(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
@@ -58,23 +58,23 @@ class ConvolutionalAutoencoder():
         x = Dense(self.middle_dim)(input)
         x = Reshape(self.middle_tensor_shape)(x)
         x = Conv2D(
-            64, (3, 3), activation='relu',
+            128, (3, 3), activation='lrelu',
             padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
             64, (3, 3),
-            activation='relu', padding='same'
+            activation='lrelu', padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
-            64, (3, 3),
-            activation='relu', padding='same'
+            32, (3, 3),
+            activation='lrelu', padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
-            64, (3, 3),
-            activation='relu', padding='same'
+            16, (3, 3),
+            activation='lrelu', padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
         decoded = Conv2D(
@@ -84,7 +84,7 @@ class ConvolutionalAutoencoder():
         return decoded
 
     def train_on_data(self, patches_data,
-                      batch_size, epochs, split=0.2):
+                      params, split=0.2):
 
         N = patches_data.shape[0]
         input_img = Input(
@@ -99,7 +99,9 @@ class ConvolutionalAutoencoder():
             self.decode(self.encode(input_img))
         )
 
-        adam = Adam(lr=0.0002, beta_1=0.5)
+        adam = Adam(
+            lr=params['lr'], beta_1=params['beta_1']
+        )
 
         model.compile(
             optimizer=adam,
@@ -114,9 +116,17 @@ class ConvolutionalAutoencoder():
         logger.debug('Fitting model')
         model.fit_generator(
             datagen.flow(
-                patches_data, patches_data, batch_size=batch_size
+                patches_data, patches_data, batch_size=params['batch_size']
             ),
-            steps_per_epoch=N / batch_size, epochs=epochs
+            steps_per_epoch=N / params['batch_size'], epochs=params['epochs'],
+            callbacks=[
+                TensorBoard(
+                    log_dir=(
+                        './tensorboardlogs'
+                    ),
+                    histogram_freq=1
+                ),
+            ],
         )
 
 
