@@ -7,6 +7,7 @@ from keras.models import Model
 from keras.callbacks import (
     TensorBoard, ModelCheckpoint
 )
+from keras.layers import LeakyReLU
 from keras.optimizers import Adam
 import numpy as np
 import logging
@@ -23,24 +24,25 @@ class ConvolutionalAutoencoder():
 
     def encode(self, input_img):
         x = Conv2D(
-            16, (3, 3), activation='lrelu',
+            16, (3, 3),
             padding='same'
         )(input_img)
+        x = LeakyReLU()(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            32, (3, 3), activation='lrelu',
-            padding='same'
+            32, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            64, (3, 3), activation='lrelu',
-            padding='same'
+            64, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
-            128, (3, 3), activation='lrelu',
-            padding='same'
+            128, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         self.middle_tensor_shape = x.shape.as_list()[1:]
         self.middle_dim = np.prod(
@@ -58,24 +60,24 @@ class ConvolutionalAutoencoder():
         x = Dense(self.middle_dim)(input)
         x = Reshape(self.middle_tensor_shape)(x)
         x = Conv2D(
-            128, (3, 3), activation='lrelu',
-            padding='same'
+            128, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
-            64, (3, 3),
-            activation='lrelu', padding='same'
+            64, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
-            32, (3, 3),
-            activation='lrelu', padding='same'
+            32, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = UpSampling2D((2, 2))(x)
         x = Conv2D(
-            16, (3, 3),
-            activation='lrelu', padding='same'
+            16, (3, 3), padding='same'
         )(x)
+        x = LeakyReLU()(x)
         x = UpSampling2D((2, 2))(x)
         decoded = Conv2D(
             3, (3, 3), activation='sigmoid',
