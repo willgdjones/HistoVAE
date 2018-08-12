@@ -2,15 +2,16 @@ from keras.layers import (
     Input, Dense, Conv2D, MaxPooling2D,
     UpSampling2D, Flatten, Reshape
 )
-# from keras.preprocessing.image import ImageDataGenerator
+from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Model
 from keras.callbacks import (
     TensorBoard, ModelCheckpoint
 )
+from keras.optimizers import Adam
 import numpy as np
 import logging
 from itertools import cycle
-
+from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +26,16 @@ class ConvolutionalAutoencoder():
             64, (3, 3), activation='relu',
             padding='same'
         )(input_img)
+        x = MaxPooling2D((2, 2), padding='same')(x)
+        x = Conv2D(
+            64, (3, 3), activation='relu',
+            padding='same'
+        )(x)
+        x = MaxPooling2D((2, 2), padding='same')(x)
+        x = Conv2D(
+            64, (3, 3), activation='relu',
+            padding='same'
+        )(x)
         x = MaxPooling2D((2, 2), padding='same')(x)
         x = Conv2D(
             64, (3, 3), activation='relu',
@@ -56,14 +67,29 @@ class ConvolutionalAutoencoder():
             activation='relu', padding='same'
         )(x)
         x = UpSampling2D((2, 2))(x)
+        x = Conv2D(
+            64, (3, 3),
+            activation='relu', padding='same'
+        )(x)
+        x = UpSampling2D((2, 2))(x)
+        x = Conv2D(
+            64, (3, 3),
+            activation='relu', padding='same'
+        )(x)
+        x = UpSampling2D((2, 2))(x)
         decoded = Conv2D(
             3, (3, 3), activation='sigmoid',
             padding='same'
         )(x)
         return decoded
 
-    def train_on_data(self, train_data, val_data,
-                      batch_size, epochs):
+    def train_on_data(self, patches_data,
+                      batch_size, epochs, split=0.2):
+
+        N = patches_data.shape[0]
+        checkpoint = int(N * (1 - split))
+        train_patches = patches_data[:checkpoint, :, :, :]
+        val_patches = patches_data[checkpoint:, :, :, :]
 
         input_img = Input(
             shape=(
@@ -76,27 +102,50 @@ class ConvolutionalAutoencoder():
             input_img,
             self.decode(self.encode(input_img))
         )
+
+        adam = Adam(lr=0.0002, beta_1=0.5)
+
         model.compile(
-            optimizer='adadelta',
-            loss='binary_crossentropy',
+            optimizer=adam,
+            loss='mean_squared_error',
         )
 
         logger.debug('Fitting model')
-        model.fit(
-            train_data,
-            validation_data=val_data,
-            batch_size=batch_size,
-            epochs=epochs,
-            callbacks=[
-                TensorBoard(
-                    log_dir=(
-                        './tensorboardlogs'
-                    ),
-                    histogram_freq=1
-                ),
-            ],
-            shuffle=True
+        train_datagen = ImageDataGenerator(
+            horizontal_flip=True,
+            vertical_flip=True
         )
+        val_datagen = ImageDataGenerator()
+
+        for e in range(epochs):
+            print('Epoch', e)
+            batches = 0
+            pbar = tqdm(len(patches_data) / batch_size)
+            for (x_train_batch, y_train_batch), (x_val_batch, y_val_batch) in\
+                zip(
+                    train_datagen.flow(
+                        train_patches, train_patches, batch_size=batch_size
+                    ),
+                    val_datagen.flow(
+                        val_patches, val_patches, batch_size=batch_size)
+                    ):
+                model.fit(
+                    train_patches, train_patches,
+                    validation_data=(val_patches, val_patches),
+                    batch_size=batch_size,
+                    callbacks=[
+                        TensorBoard(
+                            log_dir=(
+                                './tensorboardlogs'
+                            ),
+                            histogram_freq=1
+                        ),
+                    ],
+                )
+                pbar.update(1)
+                batches += 1
+                if batches >= len(patches_data) / batch_size:
+                    break
         self.model = model
 
     def train_on_generator(self, train_gen, val_gen,
@@ -119,23 +168,6 @@ class ConvolutionalAutoencoder():
             optimizer='adadelta',
             loss='binary_crossentropy',
         )
-        # datagen = ImageDataGenerator(
-        #     horizontal_flip=True,
-        #     vertical_flip=True
-        # )
-        # datagen.flow(generator, batch_size=32)
-        # epochs = 10
-        # for e in range(epochs):
-        #     print('Epoch', e)
-        #     batches = 0
-        #     for batch in datagen.flow(train_gen(), batch_size=32):
-        #         import pdb; pdb.set_trace()
-        #         model.fit(*batch)
-        #         batches += 1
-        #         if batches >= len(N) / b:
-        #             # we need to break the loop by hand because
-        #             # the generator loops indefinitely
-        #             break
         logger.debug('Fitting model')
         model.fit_generator(
             cycle(train_gen()),
@@ -166,5 +198,5 @@ class ConvolutionalAutoencoder():
     def save(self):
         assert self.model, "Model must be trained first"
         self.model.save(
-            'models/CA_{self.patchsize}_{self.N},pkl'
+            f'models/CA_ps{self.patchsize}_n{self.N}_e{self.epochs}.pkl'
         )
