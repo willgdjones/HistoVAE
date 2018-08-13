@@ -391,17 +391,17 @@ Collection.images_with_samples = get_images_with_samples()
 
 
 class Dataset():
-    def __init__(self, K, T):
+    def __init__(self, n_images, n_tissues):
         """
         K: Number of images per tissue
         T: Number of tissues with largest numbers of samples
         """
-        self.K = K
-        self.T = T
+        self.n_images = n_images
+        self.n_tissues = n_tissues
 
         self.tissue_counts = Counter(
             map(lambda x: x.tissue, Collection.images_with_samples)
-        ).most_common(T)
+        ).most_common(n_tissues)
         self.images = {}
         for tissue, count in self.tissue_counts:
             tissue_samples = Collection.where(
@@ -411,7 +411,9 @@ class Dataset():
                     s.has_expression()
                 )
             )
-            tissue_images = [x.get_image() for x in tissue_samples][:K]
+            tissue_images = [
+                x.get_image() for x in tissue_samples
+            ][:n_images]
             self.images[tissue] = tissue_images
 
     def download(self):

@@ -60,14 +60,14 @@ logger = logging.getLogger(__name__)
     help="Beta 1 to use"
 )
 @click.option(
-    '--dropout_rate', default=0,
+    '--dropout_rate', default=.0,
     help="Dropout rate to use"
 )
 def main(dataset_name, model_name, inner_dim, patch_size, epochs,
          n_patches, lr, beta_1, batch_size, dropout_rate):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
-    dataset = Dataset(K=10, T=6)
+    dataset = Dataset(n_images=10, n_tissues=6)
     Model = eval(model_name)
     logger.debug('Initializing download script')
 
@@ -96,7 +96,8 @@ def main(dataset_name, model_name, inner_dim, patch_size, epochs,
         'epochs': epochs,
         'batch_size': batch_size,
         'patch_size': patch_size,
-        'inner_dim': inner_dim
+        'inner_dim': inner_dim,
+        'dropout_rate': dropout_rate
     }
 
     m.train_on_data(
