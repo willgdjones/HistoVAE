@@ -9,7 +9,7 @@ import numpy as np
 import joblib
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
-from src.classes import ToyData
+from src.classes import Dataset
 from src.models import ConvolutionalAutoencoder
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def main(dataset_name, model_name, inner_dim, patch_size, epochs,
          n_patches, lr, beta_1, batch_size, dropout_rate):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
-    dataset = eval(dataset_name)
+    dataset = Dataset(K=10, T=6)
     Model = eval(model_name)
     logger.debug('Initializing download script')
 
