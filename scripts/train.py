@@ -71,7 +71,7 @@ def main(dataset_name, model_name, inner_dim, patch_size, epochs,
     Model = eval(model_name)
     logger.debug('Initializing download script')
 
-    N = dataset.T * dataset.K * batch_size
+    N = dataset.n_tissues * dataset.n_images * batch_size
 
     m = Model(inner_dim=inner_dim)
     data_filename = f'.cache/{dataset_name}_{patch_size}_{n_patches}.pkl'
