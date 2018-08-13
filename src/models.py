@@ -1,6 +1,6 @@
 from keras.layers import (
     Input, Dense, Conv2D, MaxPooling2D,
-    UpSampling2D, Flatten, Reshape
+    UpSampling2D, Flatten, Reshape, Dropout
 )
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Model
@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 class ConvolutionalAutoencoder():
-    def __init__(self, inner_dim):
+    def __init__(self, inner_dim, dropout_rate=0):
         self.inner_dim = inner_dim
+        self.dropout_rate = dropout_rate
 
     def encode(self, input_img):
         x = Conv2D(
@@ -47,15 +48,20 @@ class ConvolutionalAutoencoder():
             self.middle_tensor_shape
         )
         x = Flatten()(x)
+        if self.dropout_rate > 0:
+            x = Dropout(self.dropout_rate)(x)
 
         encoded = Dense(
             self.inner_dim,
-            activity_regularizer='l1'
+            activity_regularizer='l2'
         )(x)
         return encoded
 
     def decode(self, input):
-        x = Dense(self.middle_dim)(input)
+        x = input
+        if self.dropout_rate > 0:
+            x = Dropout(self.dropout_rate)(x)
+        x = Dense(self.middle_dim)(x)
         x = Reshape(self.middle_tensor_shape)(x)
         x = Conv2D(
             128, (3, 3), padding='same'
@@ -92,8 +98,9 @@ class ConvolutionalAutoencoder():
 
         self.name = (
             f"CA_ps{self.params['patch_size']}_"
-            f"n{self.params['N']}_e{self.params['epochs']}"
-            f"lr{self.params['lr']}_bs{self.params['batch_size']}"
+            f"n{self.params['N']}_e{self.params['epochs']}_"
+            f"lr{self.params['lr']}_bs{self.params['batch_size']}_"
+            f"dim{self.params['inner_dim']}_do{self.params['dropout_rate']}"
         )
         input_img = Input(
             shape=(

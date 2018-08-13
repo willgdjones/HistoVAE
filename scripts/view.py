@@ -2,34 +2,48 @@ import sys
 import requests.packages.urllib3
 import click
 import logging
+import joblib
 from keras.models import load_model
 import matplotlib.pyplot as plt
+from os.path import isfile
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
-from src.classes import Collection, ToyData, deprocess
+from src.classes import Dataset, deprocess
 
 logger = logging.getLogger(__name__)
 
 
 @click.command()
 @click.option(
-    '--dataset', default='ToyData',
+    '--dataset_name', default='ToyData',
     help="Number of images to download"
 )
 @click.option(
-    '--modelname', required=True,
+    '--model_name', required=True,
     help="Model to inspect"
 )
 @click.option(
     '--patch_size', default=128,
     help="Patch size used"
 )
-def main(dataset, modelname, patch_size):
+@click.option(
+    '--n_patches', default=10,
+    help="Number of patches to sample from each image"
+)
+def main(dataset_name, model_name, patch_size, n_patches):
     logger.info('Initializing inspect script')
-    dataset = eval(dataset)
-    data = dataset.sample_data(128, 50)
+    dataset = Dataset(K=10, T=6)
+    data_filename = f'.cache/{dataset_name}_{patch_size}_{n_patches}.pkl'
+    if isfile(data_filename):
+        logger.debug(f'Loading data from cache')
+        data = joblib.load(open(data_filename, 'rb'))
+    else:
+
+        data = dataset.sample_data(patch_size, 10)
+        logger.debug(f'Saving data to cache')
+        joblib.dump(data, open(data_filename, 'wb'))
     patches_data, imageIDs_data = data
-    model = load_model(f'models/{modelname}')
+    model = load_model(f'models/{model_name}')
     patches = data[0][:5]
     decoded_patches = model.predict(patches)
 

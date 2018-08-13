@@ -59,8 +59,12 @@ logger = logging.getLogger(__name__)
     '--batch_size', default=64,
     help="Beta 1 to use"
 )
-def main(dataset_name, model_name, inner_dim,
-         patch_size, epochs, n_patches, lr, beta_1, batch_size):
+@click.option(
+    '--dropout_rate', default=0,
+    help="Dropout rate to use"
+)
+def main(dataset_name, model_name, inner_dim, patch_size, epochs,
+         n_patches, lr, beta_1, batch_size, dropout_rate):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
     dataset = eval(dataset_name)
@@ -91,7 +95,8 @@ def main(dataset_name, model_name, inner_dim,
         'beta_1': beta_1,
         'epochs': epochs,
         'batch_size': batch_size,
-        'patch_size': patch_size
+        'patch_size': patch_size,
+        'inner_dim': inner_dim
     }
 
     m.train_on_data(

@@ -386,55 +386,58 @@ def get_images_with_samples():
         pickle.dump(images_with_samples, open(filepath, 'wb'))
     return images_with_samples
 
+
 Collection.images_with_samples = get_images_with_samples()
 
-class ToyData():
-    tissue_counts = Counter(
-        map(lambda x: x.tissue, Collection.images_with_samples)
-    ).most_common(6)
-    T = len(tissue_counts)
 
-    K = 10
-    images = {}
-    for tissue, count in tissue_counts:
-        tissue_samples = Collection.where(
-            'samples', lambda s, tissue=tissue: (
-                s.tissue == tissue and
-                s.has_image() and
-                s.has_expression()
+class Dataset():
+    def __init__(self, K, T):
+        """
+        K: Number of images per tissue
+        T: Number of tissues with largest numbers of samples
+        """
+        self.K = K
+        self.T = T
+
+        self.tissue_counts = Counter(
+            map(lambda x: x.tissue, Collection.images_with_samples)
+        ).most_common(T)
+        self.images = {}
+        for tissue, count in self.tissue_counts:
+            tissue_samples = Collection.where(
+                'samples', lambda s, tissue=tissue: (
+                    s.tissue == tissue and
+                    s.has_image() and
+                    s.has_expression()
+                )
             )
-        )
-        tissue_images = [x.get_image() for x in tissue_samples][:K]
-        images[tissue] = tissue_images
+            tissue_images = [x.get_image() for x in tissue_samples][:K]
+            self.images[tissue] = tissue_images
 
-    @staticmethod
-    def download():
-        for tissue, images in ToyData.images.items():
+    def download(self):
+        for tissue, images in self.images.items():
             logger.debug(f'Downloading {tissue} images')
             results = [image.download() for image in images]
             assert all(results), "Some images failed to download"
 
-    @staticmethod
-    def get_patchcoordfiles():
-        for tissue, images in ToyData.images.items():
+    def get_patchcoordfiles(self):
+        for tissue, images in self.images.items():
             logger.debug(f'Generating patches for {tissue}')
             results = [image.generate_patchcoords() for image in images]
             assert all(results), "Some patches failed to generate"
 
-    @staticmethod
-    def sample_data(patch_size, n_patches, split=0.2):
+    def sample_data(self, patch_size, n_patches, split=0.2):
         logger.debug(f'Generating patchset for ToyData')
-        images = ToyData.images
 
-        pbar = tqdm(total=ToyData.T * ToyData.K)
+        pbar = tqdm(total=self.T * self.K)
         patches_data = np.zeros(
-            (ToyData.T * ToyData.K * n_patches, patch_size, patch_size, 3)
+            (self.T * self.K * n_patches, patch_size, patch_size, 3)
         )
 
         imageIDs_data = []
         i = 0
-        for (t, tissue) in enumerate(images.keys()):
-            for (j, image) in enumerate(images[tissue]):
+        for (t, tissue) in enumerate(self.images.keys()):
+            for (j, image) in enumerate(self.images[tissue]):
                 patches = image.get_patches(patch_size, n_patches)
                 patches_data[
                     i * n_patches: i * n_patches + n_patches,
@@ -448,110 +451,110 @@ class ToyData():
 
         return patches_data, np.array(imageIDs_data)
 
-    @staticmethod
-    def test_data(s, n_patches, split=0.2):
-        logger.debug(f'Generating patchset for ToyData')
-        images = ToyData.images
-
-        patches_data = []
-        imageIDs_data = []
-        for (t, tissue) in enumerate(images.keys()):
-            for image in images[tissue]:
-                patches = image.get_patches(s, n_patches)
-                imageIDs = [image.imageID] * n_patches
-                patches_data.extend(patches)
-                imageIDs_data.extend(imageIDs)
-
-        return patches_data, imageIDs_data
-
-    @staticmethod
-    def training_data(s, n_patches, split=0.2):
-        logger.debug(f'Generating patchset for ToyData')
-        images = ToyData.images
-        train, val = train_val_split(images, split)
-
-        pbar1 = tqdm(total=ToyData.T * ToyData.K)
-        train_patches_data = []
-        train_imageIDs_data = []
-        for (t, tissue) in tqdm(enumerate(train.keys())):
-            for image in images[tissue]:
-                patches = image.get_patches(s, n_patches)
-                imageIDs = [image.imageID] * n_patches
-                train_patches_data.extend(patches)
-                train_imageIDs_data.extend(imageIDs)
-                pbar1.update(1)
-        pbar1.close()
-
-        pbar2 = tqdm(total=ToyData.T * ToyData.K)
-        val_patches_data = []
-        val_imageIDs_data = []
-        for (t, tissue) in tqdm(enumerate(val.keys())):
-            for image in images[tissue]:
-                patches = image.get_patches(s, n_patches)
-                imageIDs = [image.imageID] * n_patches
-                val_patches_data.extend(patches)
-                val_imageIDs_data.extend(imageIDs)
-                pbar2.update(1)
-        pbar2.close()
-
-        return (
-            train_patches_data, train_imageIDs_data,
-            val_patches_data, val_imageIDs_data, split
-        )
-
-    @staticmethod
-    def test_generators(s, n_patches, split=0.2):
-        logger.debug(f'Generating patchset for ToyData')
-        images = ToyData.images
-
-        def imageIDs_gen():
-            for (t, tissue) in enumerate(images.keys()):
-                for image in images[tissue]:
-                    labels = [image.imageID] * n_patches
-                    yield labels
-
-        def patches_gen():
-            for (t, tissue) in enumerate(images.keys()):
-                for image in images[tissue]:
-                    patches = image.get_patches(s, n_patches)
-                    yield patches, patches
-
-        return patches_gen, imageIDs_gen
-
-    @staticmethod
-    def training_generators(s, n_patches, split=0.2):
-        logger.debug(f'Generating patchset for ToyData')
-        images = ToyData.images
-        train, val = train_val_split(images, split)
-
-        def train_imageIDs_gen():
-            for (t, tissue) in enumerate(sorted(train.keys())):
-                for image in train[tissue]:
-                    labels = [image.imageID] * n_patches
-                    yield labels
-
-        def val_imageIDs_gen():
-            for (t, tissue) in enumerate(sorted(val.keys())):
-                for image in train[tissue]:
-                    labels = [image.imageID] * n_patches
-                    yield labels
-
-        def train_patches_gen():
-            for (t, tissue) in enumerate(sorted(train.keys())):
-                for image in train[tissue]:
-                    patches = image.get_patches(s, n_patches)
-                    yield patches, patches
-
-        def val_patches_gen():
-            for (t, tissue) in enumerate(sorted(val.keys())):
-                for image in val[tissue]:
-                    patches = image.get_patches(s, n_patches)
-                    yield patches, patches
-
-        return (
-            train_patches_gen, train_imageIDs_gen,
-            val_patches_gen, val_imageIDs_gen, split
-        )
+    # @staticmethod
+    # def test_data(s, n_patches, split=0.2):
+    #     logger.debug(f'Generating patchset for ToyData')
+    #     images = ToyData.images
+    #
+    #     patches_data = []
+    #     imageIDs_data = []
+    #     for (t, tissue) in enumerate(images.keys()):
+    #         for image in images[tissue]:
+    #             patches = image.get_patches(s, n_patches)
+    #             imageIDs = [image.imageID] * n_patches
+    #             patches_data.extend(patches)
+    #             imageIDs_data.extend(imageIDs)
+    #
+    #     return patches_data, imageIDs_data
+    #
+    # @staticmethod
+    # def training_data(s, n_patches, split=0.2):
+    #     logger.debug(f'Generating patchset for ToyData')
+    #     images = ToyData.images
+    #     train, val = train_val_split(images, split)
+    #
+    #     pbar1 = tqdm(total=ToyData.T * ToyData.K)
+    #     train_patches_data = []
+    #     train_imageIDs_data = []
+    #     for (t, tissue) in tqdm(enumerate(train.keys())):
+    #         for image in images[tissue]:
+    #             patches = image.get_patches(s, n_patches)
+    #             imageIDs = [image.imageID] * n_patches
+    #             train_patches_data.extend(patches)
+    #             train_imageIDs_data.extend(imageIDs)
+    #             pbar1.update(1)
+    #     pbar1.close()
+    #
+    #     pbar2 = tqdm(total=ToyData.T * ToyData.K)
+    #     val_patches_data = []
+    #     val_imageIDs_data = []
+    #     for (t, tissue) in tqdm(enumerate(val.keys())):
+    #         for image in images[tissue]:
+    #             patches = image.get_patches(s, n_patches)
+    #             imageIDs = [image.imageID] * n_patches
+    #             val_patches_data.extend(patches)
+    #             val_imageIDs_data.extend(imageIDs)
+    #             pbar2.update(1)
+    #     pbar2.close()
+    #
+    #     return (
+    #         train_patches_data, train_imageIDs_data,
+    #         val_patches_data, val_imageIDs_data, split
+    #     )
+    #
+    # @staticmethod
+    # def test_generators(s, n_patches, split=0.2):
+    #     logger.debug(f'Generating patchset for ToyData')
+    #     images = ToyData.images
+    #
+    #     def imageIDs_gen():
+    #         for (t, tissue) in enumerate(images.keys()):
+    #             for image in images[tissue]:
+    #                 labels = [image.imageID] * n_patches
+    #                 yield labels
+    #
+    #     def patches_gen():
+    #         for (t, tissue) in enumerate(images.keys()):
+    #             for image in images[tissue]:
+    #                 patches = image.get_patches(s, n_patches)
+    #                 yield patches, patches
+    #
+    #     return patches_gen, imageIDs_gen
+    #
+    # @staticmethod
+    # def training_generators(s, n_patches, split=0.2):
+    #     logger.debug(f'Generating patchset for ToyData')
+    #     images = ToyData.images
+    #     train, val = train_val_split(images, split)
+    #
+    #     def train_imageIDs_gen():
+    #         for (t, tissue) in enumerate(sorted(train.keys())):
+    #             for image in train[tissue]:
+    #                 labels = [image.imageID] * n_patches
+    #                 yield labels
+    #
+    #     def val_imageIDs_gen():
+    #         for (t, tissue) in enumerate(sorted(val.keys())):
+    #             for image in train[tissue]:
+    #                 labels = [image.imageID] * n_patches
+    #                 yield labels
+    #
+    #     def train_patches_gen():
+    #         for (t, tissue) in enumerate(sorted(train.keys())):
+    #             for image in train[tissue]:
+    #                 patches = image.get_patches(s, n_patches)
+    #                 yield patches, patches
+    #
+    #     def val_patches_gen():
+    #         for (t, tissue) in enumerate(sorted(val.keys())):
+    #             for image in val[tissue]:
+    #                 patches = image.get_patches(s, n_patches)
+    #                 yield patches, patches
+    #
+    #     return (
+    #         train_patches_gen, train_imageIDs_gen,
+    #         val_patches_gen, val_imageIDs_gen, split
+    #     )
 
 
 def train_val_split(data, split):
