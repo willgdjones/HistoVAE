@@ -3,20 +3,24 @@ import logging
 import click
 import os
 sys.path.append('.')
-from src.classes import Collection, ToyData
+from src.classes import Dataset
 
 logger = logging.getLogger(__name__)
 
 
 @click.command()
 @click.option(
-    '--datasetname', default='ToyData',
-    help="Dataset to use"
+    '--n_images', default=10,
+    help="Number of images per tissue"
 )
-def main(datasetname):
+@click.option(
+    '--n_tissues', default=6,
+    help="Number of tissues with most numbers of samples"
+)
+def main(n_images, n_tissues):
     os.makedirs('data/patches', exist_ok=True)
     logger.info('Initializing patches script')
-    dataset = eval(datasetname)
+    dataset = Dataset(n_images=n_images, n_tissues=n_tissues)
     dataset.get_patchcoordfiles()
 
 
