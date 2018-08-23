@@ -6,13 +6,13 @@ import logging
 import numpy as np
 from keras.models import load_model
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from os.path import isfile
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
 from src.classes import Dataset, deprocess
 
-matplotlib.use('Agg')
 logger = logging.getLogger(__name__)
 MODEL_PATH = 'models/'
 
