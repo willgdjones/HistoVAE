@@ -4,6 +4,7 @@ import requests
 import cv2
 import mahotas
 import pickle
+import joblib
 from os.path import isfile
 from openslide import open_slide
 from openslide.deepzoom import DeepZoomGenerator
@@ -11,7 +12,6 @@ import numpy as np
 from tqdm import tqdm
 from tables import open_file, Atom, Filters
 from collections import Counter
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +54,11 @@ class Image():
         else:
             logger.debug(f'Downloading {str(self)}')
             session = requests.session()
-            URL = "https://brd.nci.nih.gov/brd/imagedownload/"\
-                    + self.imageID
+            URL = "https://brd.nci.nih.gov/brd/imagedownload/" + self.imageID
             logger.debug(f'Getting URL for {str(self)}')
             response = session.get(URL, stream=True)
             if response.ok:
                 outfile = open(self.imagefilepath, 'wb')
-                # total_length = int(response.headers.get('content-length'))
                 total_length = 500 * ((2**10)**2)
                 chunk_size = 1024
                 expected_size = (total_length/1024) + 1
@@ -159,7 +157,6 @@ class Image():
             )
 
             N = len(mask_centers)
-            # tiles = np.zeros((patchsize, patchsize, 3, N), dtype=np.uint8)
             logger.debug('Retrieving tiles')
 
             assert (mask_centers[-1] * downsample) / patchsize <\
@@ -416,6 +413,9 @@ class Dataset():
             ][:n_images]
             self.images[tissue] = tissue_images
 
+    def __repr__(self):
+        return f"<Dataset:T{self.n_tissues}-I{self.n_images}>"
+
     def download(self):
         for tissue, images in self.images.items():
             logger.debug(f'Downloading {tissue} images')
@@ -428,30 +428,43 @@ class Dataset():
             results = [image.generate_patchcoords() for image in images]
             assert all(results), "Some patches failed to generate"
 
-    def sample_data(self, patch_size, n_patches, split=0.2):
-        logger.debug(f'Generating patchset for ToyData')
+    def sample_data(self, patch_size, n_patches, resample=False):
+        logger.debug(f'Generating patchset for {self}')
 
-        pbar = tqdm(total=self.T * self.K)
-        patches_data = np.zeros(
-            (self.T * self.K * n_patches, patch_size, patch_size, 3)
+        data_filename = (
+            f'.cache/{self.n_tissues}_{self.n_images}_'
+            '{n_patches}_{patch_size}.pkl'
         )
+        if isfile(data_filename) and not resample:
+            logger.debug(f'Loading data from cache')
+            data = joblib.load(open(data_filename, 'rb'))
+        else:
+            pbar = tqdm(total=self.n_tissues * self.n_images)
+            patches_data = np.zeros((
+                self.n_tissues * self.n_images * n_patches,
+                patch_size, patch_size, 3
+            ))
 
-        imageIDs_data = []
-        i = 0
-        for (t, tissue) in enumerate(self.images.keys()):
-            for (j, image) in enumerate(self.images[tissue]):
-                patches = image.get_patches(patch_size, n_patches)
-                patches_data[
-                    i * n_patches: i * n_patches + n_patches,
-                    :, :, :
-                ] = patches
-                imageIDs = [image.imageID] * n_patches
-                imageIDs_data.extend(imageIDs)
-                pbar.update(1)
-                i += 1
-        pbar.close()
+            imageIDs_data = []
+            i = 0
+            for (t, tissue) in enumerate(self.images.keys()):
+                for (j, image) in enumerate(self.images[tissue]):
+                    patches = image.get_patches(patch_size, n_patches)
+                    patches_data[
+                        i * n_patches: i * n_patches + n_patches,
+                        :, :, :
+                    ] = patches
+                    imageIDs = [image.imageID] * n_patches
+                    imageIDs_data.extend(imageIDs)
+                    pbar.update(1)
+                    i += 1
+            pbar.close()
 
-        return patches_data, np.array(imageIDs_data)
+            logger.debug(f'Saving data to cache')
+            data = patches_data, np.array(imageIDs_data)
+            joblib.dump(data, open(data_filename, 'wb'))
+
+        return data
 
     # @staticmethod
     # def test_data(s, n_patches, split=0.2):

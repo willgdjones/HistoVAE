@@ -2,40 +2,30 @@ import sys
 import requests.packages.urllib3
 import click
 import os
-from os.path import isfile
 import logging
-import random
 import numpy as np
-import joblib
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
 from src.classes import Dataset
-from src.models import ConvolutionalAutoencoder
+
 
 logger = logging.getLogger(__name__)
 
 
+def extract_params(param_string):
+    params = [p.split(':') for p in param_string.split('|')]
+    params = dict((p[0], eval(p[1])) for p in params)
+    return params
+
+
 @click.command()
 @click.option(
-    '--dataset_name', default='ToyData',
-    help="Number of images to download"
+    '--n_tissues', default=6,
+    help="Number of tissues with most numbers of samples"
 )
 @click.option(
-    '--model_name', default='ConvolutionalAutoencoder',
-    help="Number of images to download"
-)
-@click.option(
-    '--inner_dim', default=512,
-    help=(
-        "Dimension of the inner vector"
-        "Only relevant to deep learning models"
-    )
-)
-@click.option(
-    '--epochs', default=100,
-    help=(
-        "Number of epochs"
-    )
+    '--n_images', default=10,
+    help="Number of images per tissue"
 )
 @click.option(
     '--n_patches', default=100,
@@ -48,57 +38,37 @@ logger = logging.getLogger(__name__)
     help="Patchsize to use"
 )
 @click.option(
-    '--lr', default=0.0002,
-    help="Learning rate to use"
+    '--model_name', default='ConvolutionalAutoencoder',
+    help="Number of images to download"
 )
 @click.option(
-    '--beta_1', default=0.05,
-    help="Beta 1 to use"
+    '--param_string', default=(
+        'inner_dim:512|epochs:100|lr:0.0001|beta_1:0.05|'
+        'batch_size:64|dropout_rate:.0'
+    ),
+    help=(
+        "Specify the hyperparameters of the model."
+    )
 )
-@click.option(
-    '--batch_size', default=64,
-    help="Beta 1 to use"
-)
-@click.option(
-    '--dropout_rate', default=.0,
-    help="Dropout rate to use"
-)
-def main(dataset_name, model_name, inner_dim, patch_size, epochs,
-         n_patches, lr, beta_1, batch_size, dropout_rate):
+def main(n_tissues, n_images, n_patches, patch_size, model_name, param_string):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
-    dataset = Dataset(n_images=10, n_tissues=6)
+    dataset = Dataset(n_tissues=n_tissues, n_images=n_images)
     Model = eval(model_name)
     logger.debug('Initializing download script')
 
-    N = dataset.n_tissues * dataset.n_images * batch_size
+    params = extract_params(param_string)
 
-    m = Model(inner_dim=inner_dim)
-    data_filename = f'.cache/{dataset_name}_{patch_size}_{n_patches}.pkl'
-    if isfile(data_filename):
-        logger.debug(f'Loading data from cache')
-        data = joblib.load(open(data_filename, 'rb'))
-    else:
+    N = dataset.n_tissues * dataset.n_images * params['batch_size']
 
-        data = dataset.sample_data(patch_size, int(n_patches))
-        logger.debug(f'Saving data to cache')
-        joblib.dump(data, open(data_filename, 'wb'))
+    m = Model(inner_dim=params['inner_dim'])
 
+    data = dataset.sample_data(patch_size, int(n_patches))
     patches_data, imageIDs_data = data
     N = patches_data.shape[0]
     assert N == imageIDs_data.shape[0]
     p = np.random.permutation(N)
     patches_data, imageIDs_data = patches_data[p], imageIDs_data[p]
-
-    params = {
-        'lr': lr,
-        'beta_1': beta_1,
-        'epochs': epochs,
-        'batch_size': batch_size,
-        'patch_size': patch_size,
-        'inner_dim': inner_dim,
-        'dropout_rate': dropout_rate
-    }
 
     m.train_on_data(
         patches_data, params
