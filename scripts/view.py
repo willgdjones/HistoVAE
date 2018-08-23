@@ -59,8 +59,6 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
             ax[1][i].imshow(deprocess(decoded_patches[i]))
             ax[1][i].axis('off')
         plt.savefig(f'figures/{model_file}.png')
-
-        plt.show()
     else:
         model_files = sorted(os.listdir(MODEL_PATH))
         n = len(model_files)
@@ -78,7 +76,6 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
                     ax[2*k][i].set_title(model_file)
                 ax[2*k + 1][i].imshow(deprocess(decoded_patches[i]))
                 ax[2*k + 1][i].axis('off')
-        plt.show()
         plt.savefig(f'figures/all_models.png')
 
 
