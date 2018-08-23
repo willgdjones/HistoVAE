@@ -50,7 +50,7 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
         fig, ax = plt.subplots(
             2, K, figsize=(1, 4)
         )
-        model = load_model(f'{MODEL_PATH}{model_file}')
+        model = load_model(MODEL_PATH + f'{model_file}.pkl')
         decoded_patches = model.predict(patches)
         fig.suptitle(model_file)
         for i in range(K):
@@ -68,7 +68,7 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
             2 * n, K, figsize=(8, 4 * n)
         )
         for (k, model_file) in enumerate(model_files):
-            model = load_model(f'{MODEL_PATH}{model_file}')
+            model = load_model(MODEL_PATH + f'{model_file}.pkl')
             logger.debug(f'Generating decodings for {model_file}')
             decoded_patches = model.predict(patches)
             for i in range(K):
@@ -80,6 +80,7 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
                 ax[2*k + 1][i].axis('off')
         plt.show()
         plt.savefig(f'figures/all_models.png')
+
 
 if __name__ == '__main__':
     logging.basicConfig(
