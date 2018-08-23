@@ -69,7 +69,7 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
             2 * n, K, figsize=(8, 4 * n)
         )
         for (k, model_file) in enumerate(model_files):
-            model_name = model_file.split('.')[0]
+            model_name = model_file.replace('.pkl', '')
             model = load_model(MODEL_PATH + f'{model_name}.pkl')
             logger.debug(f'Generating decodings for {model_file}')
             decoded_patches = model.predict(patches)
