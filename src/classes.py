@@ -270,20 +270,20 @@ class Coord():
 
 
 class ID():
-    def __init__(self, GTExID):
-        split = GTExID.split('-')
-        if GTExID.startswith('K-562'):
+    def __init__(self, GTEx_ID):
+        split = GTEx_ID.split('-')
+        if GTEx_ID.startswith('K-562'):
             self.aliquot = split[-1]
             self.donor = 'K-562'
             self.sample = 'K-562'
         else:
-            self.GTExID = GTExID
+            self.GTEx_ID = GTEx_ID
             self.donor = split[1]
             self.sample = split[2]
         self.aliquot = split[-1] if len(split) == 5 else None
 
     def __repr__(self):
-        return f"ID:{self.GTExID}"
+        return f"ID:{self.GTEx_ID}"
 
 
 class Sample():
