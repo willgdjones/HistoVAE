@@ -7,7 +7,9 @@ import numpy as np
 requests.packages.urllib3.disable_warnings()
 sys.path.append('.')
 from src.classes import Dataset
-
+from src.models import (
+    VariationalConvolutionalAutoencoder, ConvolutionalAutoencoder
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ def extract_params(param_string):
     help="Patchsize to use"
 )
 @click.option(
-    '--model_name', default='ConvolutionalAutoencoder',
+    '--model_type', default='ConvolutionalAutoencoder',
     help="Number of images to download"
 )
 @click.option(
@@ -50,14 +52,15 @@ def extract_params(param_string):
         "Specify the hyperparameters of the model."
     )
 )
-def main(n_tissues, n_images, n_patches, patch_size, model_name, param_string):
+def main(n_tissues, n_images, n_patches, patch_size, model_type, param_string):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
     dataset = Dataset(n_tissues=n_tissues, n_images=n_images)
-    Model = eval(model_name)
+    Model = eval(model_type)
     logger.debug('Initializing download script')
 
     params = extract_params(param_string)
+    params['patch_size'] = patch_size
 
     N = dataset.n_tissues * dataset.n_images * params['batch_size']
 
@@ -79,7 +82,7 @@ def main(n_tissues, n_images, n_patches, patch_size, model_name, param_string):
 
 if __name__ == '__main__':
     logging.basicConfig(
-        filename='logs/train.conf', level=logging.DEBUG,
+        filename='logs/train.log', level=logging.DEBUG,
         format=(
             "%(asctime)s | %(name)s | %(processName)s"
             " | %(levelname)s: %(message)s"

@@ -433,7 +433,7 @@ class Dataset():
 
         data_filename = (
             f'.cache/{self.n_tissues}_{self.n_images}_'
-            '{n_patches}_{patch_size}.pkl'
+            f'{n_patches}_{patch_size}.pkl'
         )
         if isfile(data_filename) and not resample:
             logger.debug(f'Loading data from cache')
