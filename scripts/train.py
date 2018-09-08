@@ -46,7 +46,7 @@ def extract_params(param_string):
 @click.option(
     '--param_string', default=(
         'inner_dim:512|epochs:100|lr:0.0001|beta_1:0.05|'
-        'batch_size:64|dropout_rate:.0'
+        'batch_size:64|dropout_rate:0.5'
     ),
     help=(
         "Specify the hyperparameters of the model."

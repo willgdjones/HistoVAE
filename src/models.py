@@ -8,7 +8,7 @@ from keras.callbacks import (
     TensorBoard, ModelCheckpoint
 )
 from keras.layers import LeakyReLU, Lambda, Layer
-from keras.optimizers import Adam
+from keras.optimizers import Adam, RMSprop
 from keras import metrics
 from keras import backend as K
 import numpy as np
@@ -156,8 +156,6 @@ class ConvolutionalAutoencoder():
         self.model.save("models/" + self.name + ".pkl")
 
 
-
-
 class VariationalConvolutionalAutoencoder(object):
     def __init__(self, inner_dim, dropout_rate=0):
         self.inner_dim = inner_dim
@@ -212,10 +210,6 @@ class VariationalConvolutionalAutoencoder(object):
         self.z_mean = z_mean
         self.z_log_var = z_log_var
 
-        # encoded = Dense(
-        #     self.inner_dim,
-        #     activity_regularizer='l2'
-        # )(x)
         return z
 
     def decode(self, input):
@@ -251,9 +245,6 @@ class VariationalConvolutionalAutoencoder(object):
         return decoded
 
     def build(self, patches_data, params):
-
-        # Custom loss layer
-
 
         N = patches_data.shape[0]
         self.params = params
@@ -294,14 +285,13 @@ class VariationalConvolutionalAutoencoder(object):
                                          - K.exp(self.z_log_var), axis=-1)
                 return K.mean(xent_loss + kl_loss)
 
-            def call(self, inputs,):
+            def call(self, inputs):
                 x = inputs[0]
                 x_decoded_mean_squash = inputs[1]
                 loss = self.vae_loss(x, x_decoded_mean_squash)
                 self.add_loss(loss, inputs=inputs)
                 # We don't use this output.
                 return x
-
 
         y = CustomVariationalLayer(
             self.z_mean, self.z_log_var, self.params['patch_size']
@@ -312,6 +302,10 @@ class VariationalConvolutionalAutoencoder(object):
 
     def train_on_data(self, patches_data, params):
 
+        # rmsprop = RMSprop(
+        #     0.001, epsilon=1.0
+        # )
+
         adam = Adam(
             lr=params['lr'], beta_1=params['beta_1']
         )
@@ -319,8 +313,7 @@ class VariationalConvolutionalAutoencoder(object):
         model = self.build(patches_data, params)
 
         model.compile(
-            optimizer=adam,
-            loss='mean_squared_error',
+            optimizer=adam, loss=None
         )
 
         datagen = ImageDataGenerator(
@@ -329,9 +322,10 @@ class VariationalConvolutionalAutoencoder(object):
         )
 
         logger.debug('Fitting model')
+
         model.fit_generator(
             datagen.flow(
-                patches_data, patches_data, batch_size=params['batch_size']
+                patches_data, batch_size=params['batch_size']
             ),
             steps_per_epoch=self.params['N'] / params['batch_size'],
             epochs=params['epochs'],
