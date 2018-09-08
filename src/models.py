@@ -334,22 +334,22 @@ class VariationalConvolutionalAutoencoder(object):
 
         logger.debug('Fitting model')
 
-        model.fit(patches_data, patches_data, batch_size=params['batch_size'])
+        # model.fit(patches_data, patches_data, batch_size=params['batch_size'])
 
-        # model.fit_generator(
-        #     datagen.flow(
-        #         patches_data, patches_data, batch_size=params['batch_size']
-        #     ),
-        #     steps_per_epoch=self.params['N'] / params['batch_size'],
-        #     epochs=params['epochs'],
-        #     callbacks=[
-        #         TensorBoard(
-        #             log_dir=(
-        #                 f'./tensorboardlogs/{self.name}'
-        #             )
-        #         ),
-        #     ],
-        # )
+        model.fit_generator(
+            datagen.flow(
+                patches_data, patches_data, batch_size=params['batch_size']
+            ),
+            steps_per_epoch=self.params['N'] / params['batch_size'],
+            epochs=params['epochs'],
+            callbacks=[
+                TensorBoard(
+                    log_dir=(
+                        f'./tensorboardlogs/{self.name}'
+                    )
+                ),
+            ],
+        )
         self.model = model
 
     def save(self):
