@@ -195,11 +195,14 @@ class VariationalConvolutionalAutoencoder(object):
         z_mean = Dense(self.inner_dim)(x)
         z_log_var = Dense(self.inner_dim)(x)
 
+        inner_dim = self.inner_dim
+        epsilon_std = self.epsilon_std
+
         def sampling(args):
             z_mean, z_log_var = args
             epsilon = K.random_normal(
-                shape=(K.shape(z_mean)[0], self.inner_dim),
-                mean=0., stddev=self.epsilon_std
+                shape=(K.shape(z_mean)[0], inner_dim),
+                mean=0., stddev=epsilon_std
             )
             return z_mean + K.exp(z_log_var) * epsilon
 
