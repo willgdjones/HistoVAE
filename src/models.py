@@ -1,3 +1,4 @@
+import tensorflow as tf
 from keras.layers import (
     Input, Dense, Conv2D, MaxPooling2D,
     UpSampling2D, Flatten, Reshape, Dropout
@@ -5,7 +6,7 @@ from keras.layers import (
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Model
 from keras.callbacks import (
-    TensorBoard, ModelCheckpoint
+    Callback, TensorBoard, ModelCheckpoint
 )
 from keras.layers import LeakyReLU, Lambda, Layer
 from keras.optimizers import Adam, RMSprop
@@ -283,7 +284,7 @@ class VariationalConvolutionalAutoencoder(object):
             lr=params['lr'], beta_1=params['beta_1']
         )
 
-        model = self.build(patches_data, params)
+        self.model = self.build(patches_data, params)
 
         def vae_loss(x, x_decoded_mean_squash):
             x = K.flatten(x)
@@ -296,7 +297,7 @@ class VariationalConvolutionalAutoencoder(object):
                                      - K.exp(self.z_log_var), axis=-1)
             return K.mean(xent_loss + kl_loss)
 
-        model.compile(
+        self.model.compile(
             optimizer=adam, loss=vae_loss
         )
 
@@ -307,9 +308,52 @@ class VariationalConvolutionalAutoencoder(object):
 
         logger.debug('Fitting model')
 
-        # model.fit(patches_data, patches_data, batch_size=params['batch_size'])
+        def make_image(tensor):
+            """
+            Convert an numpy representation image to Image protobuf.
+            Copied from https://github.com/lanpa/tensorboard-pytorch/
+            """
+            from PIL import Image
+            tensor = np.squeeze(tensor)
+            height, width, channel = tensor.shape
 
-        model.fit_generator(
+            tensor = np.floor(tensor * 256).astype('uint8')
+            image = Image.fromarray(tensor)
+            import io
+            output = io.BytesIO()
+            image.save(output, format='PNG')
+            image_string = output.getvalue()
+            output.close()
+            return tf.Summary.Image(
+                height=height, width=width, colorspace=channel,
+                encoded_image_string=image_string
+            )
+
+        class TensorBoardImage(Callback):
+            def __init__(self, patches_data):
+                super().__init__()
+                self.patches_data = patches_data
+
+            def on_epoch_end(self, epoch, logs={}):
+                # Load image
+                patch = patches_data[0]
+                s = patch.shape[0]
+                decoded_patch = self.model.predict(
+                    np.reshape(patch, (1, s, s, 3))
+                )
+                double_patch = np.zeros((s, 2 * s, 3))
+                double_patch[:, 0:s, :] = patch
+                double_patch[:, s:, :] = decoded_patch
+
+                image = make_image(decoded_patch)
+                summary = tf.Summary(
+                    value=[tf.Summary.Value(tag='Decodings', image=image)]
+                )
+                writer = tf.summary.FileWriter('./logs')
+                writer.add_summary(summary, epoch)
+                writer.close()
+
+        self.model.fit_generator(
             datagen.flow(
                 patches_data, patches_data, batch_size=params['batch_size']
             ),
@@ -321,6 +365,7 @@ class VariationalConvolutionalAutoencoder(object):
                         f'./tensorboardlogs/{self.name}'
                     )
                 ),
+                TensorBoardImage(patches_data)
             ],
         )
         self.model = model
