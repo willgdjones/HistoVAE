@@ -342,8 +342,8 @@ class VariationalConvolutionalAutoencoder(object):
                     np.reshape(patch, (1, s, s, 3))
                 )
                 double_patch = np.zeros((s, 2 * s, 3))
-                double_patch[:, 0:s, :] = patch
-                double_patch[:, s:, :] = decoded_patch
+                double_patch[:, 0:s, :] = 255 - patch
+                double_patch[:, s:, :] = 255 - decoded_patch
 
                 image = make_image(double_patch)
                 summary = tf.Summary(
