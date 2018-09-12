@@ -345,7 +345,7 @@ class VariationalConvolutionalAutoencoder(object):
                 double_patch[:, 0:s, :] = patch
                 double_patch[:, s:, :] = decoded_patch
 
-                image = make_image(decoded_patch)
+                image = make_image(double_patch)
                 summary = tf.Summary(
                     value=[tf.Summary.Value(tag='Decodings', image=image)]
                 )
