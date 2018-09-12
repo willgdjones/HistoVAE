@@ -124,7 +124,7 @@ class ConvolutionalAutoencoder():
             lr=params['lr'], beta_1=params['beta_1']
         )
 
-        model = self.build()
+        model = self.build(patches_data, params)
 
         model.compile(
             optimizer=adam,
