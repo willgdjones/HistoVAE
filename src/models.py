@@ -349,7 +349,7 @@ class VariationalConvolutionalAutoencoder(object):
                 summary = tf.Summary(
                     value=[tf.Summary.Value(tag='Decodings', image=image)]
                 )
-                writer = tf.summary.FileWriter('./logs')
+                writer = tf.summary.FileWriter('./tensorboardlogs')
                 writer.add_summary(summary, epoch)
                 writer.close()
 
@@ -368,7 +368,6 @@ class VariationalConvolutionalAutoencoder(object):
                 TensorBoardImage(patches_data)
             ],
         )
-        self.model = model
 
     def save(self):
         assert self.model, "Model must be trained first"
