@@ -330,9 +330,10 @@ class VariationalConvolutionalAutoencoder(object):
             )
 
         class TensorBoardImage(Callback):
-            def __init__(self, patches_data):
+            def __init__(self, patches_data, tag):
                 super().__init__()
                 self.patches_data = patches_data
+                self.tag = tag
 
             def on_epoch_end(self, epoch, logs={}):
                 # Load image
@@ -347,7 +348,7 @@ class VariationalConvolutionalAutoencoder(object):
 
                 image = make_image(double_patch)
                 summary = tf.Summary(
-                    value=[tf.Summary.Value(tag='Decodings', image=image)]
+                    value=[tf.Summary.Value(tag=self.tag, image=image)]
                 )
                 writer = tf.summary.FileWriter('./tensorboardlogs')
                 writer.add_summary(summary, epoch)
@@ -365,7 +366,7 @@ class VariationalConvolutionalAutoencoder(object):
                         f'./tensorboardlogs/{self.name}'
                     )
                 ),
-                TensorBoardImage(patches_data)
+                TensorBoardImage(patches_data, self.name)
             ],
         )
 
