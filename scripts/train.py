@@ -56,7 +56,7 @@ def main(n_tissues, n_images, n_patches, patch_size, model_type, param_string):
     np.random.seed(42)
     os.makedirs('data/images', exist_ok=True)
     dataset = Dataset(n_tissues=n_tissues, n_images=n_images)
-    Model = eval(model_type)
+
     logger.debug('Initializing download script')
 
     params = extract_params(param_string)
@@ -64,20 +64,27 @@ def main(n_tissues, n_images, n_patches, patch_size, model_type, param_string):
 
     N = dataset.n_tissues * dataset.n_images * params['batch_size']
 
-    m = Model(inner_dim=params['inner_dim'])
-
     data = dataset.sample_data(patch_size, int(n_patches))
     patches_data, imageIDs_data = data
-    N = patches_data.shape[0]
-    assert N == imageIDs_data.shape[0]
-    p = np.random.permutation(N)
-    patches_data, imageIDs_data = patches_data[p], imageIDs_data[p]
 
-    m.train_on_data(
-        patches_data, params
-    )
+    if model_type == 'concrete_vae':
+        from dependencies.vae_concrete.vae_concrete import VAE
+        m = VAE(latent_cont_dim=256)
+        m.fit(patches_data, num_epochs=20)
 
-    m.save()
+    else:
+        Model = eval(model_type)
+        m = Model(inner_dim=params['inner_dim'])
+        N = patches_data.shape[0]
+        assert N == imageIDs_data.shape[0]
+        p = np.random.permutation(N)
+        patches_data, imageIDs_data = patches_data[p], imageIDs_data[p]
+
+        m.train_on_data(
+            patches_data, params
+        )
+
+        m.save()
 
 
 if __name__ == '__main__':
