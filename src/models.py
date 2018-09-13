@@ -261,6 +261,7 @@ class VariationalConvolutionalAutoencoder(object):
             f"n{self.params['N']}_e{self.params['epochs']}_"
             f"lr{self.params['lr']}_bs{self.params['batch_size']}_"
             f"dim{self.params['inner_dim']}_do{self.params['dropout_rate']}"
+            "ps*mse"
         )
         input_img = Input(
             shape=(
@@ -291,7 +292,7 @@ class VariationalConvolutionalAutoencoder(object):
         def vae_loss(x, x_decoded_mean_squash):
             x = K.flatten(x)
             x_decoded_mean_squash = K.flatten(x_decoded_mean_squash)
-            xent_loss = metrics.mean_squared_error(
+            xent_loss = patches_data.shape[1] * metrics.mean_squared_error(
                 x, x_decoded_mean_squash
             )
             kl_loss = - 0.5 * K.mean(1 + self.z_log_var
