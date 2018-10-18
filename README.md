@@ -1,4 +1,4 @@
-``
+``
 # HistoVAE
 This repository outlines the HistoVAE project. Learning representations from histopathology images using unsupervised deep learning to create utility out of unlabelled histopathology images.
 
