@@ -23,12 +23,10 @@ def main():
     dataset = Dataset(n_tissues=6, n_images=10)
     data = dataset.sample_data(128, 50)
     patches_data, imageIDs_data = data
-    # np.save('images.npy', 255 - patches_data[:100])
     for i in tqdm(range(len(imageIDs_data))):
         GTEx_ID = imageIDs_data[i]
-        idx = i % 100
-        scipy.misc.imsave(f'data/cellprofiler/patches/{GTEx_ID}_{idx}.png', 255 - patches_data[i])
-
+        idx = i % 50
+        scipy.misc.imsave(f'data/cellprofiler/patches/{i:04d}_{GTEx_ID}_{idx}.png', 255 - patches_data[i])
 
 if __name__ == '__main__':
     logging.basicConfig(

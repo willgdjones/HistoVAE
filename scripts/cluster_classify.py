@@ -8,21 +8,14 @@ import click
 import pickle
 import scipy.misc
 import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+from tqdm import tqdm
 from os.path import isfile
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
 from collections import namedtuple
-sys.path.append('.')
-from src.classes import Dataset, deprocess, Image
-from src.models import *
-from joblib import Parallel, delayed
-from tqdm import tqdm
-import pandas as pd
-from keras.models import Model, load_model
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-from mpl_toolkits.mplot3d import Axes3D
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -30,6 +23,14 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import label_binarize
 from sklearn.svm import SVC
 from sklearn.multiclass import OneVsRestClassifier
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from keras.models import Model, load_model
+from mpl_toolkits.mplot3d import Axes3D
+sys.path.append('.')
+from src.classes import Dataset, deprocess, Image
+from src.models import *
+
 
 logger = logging.getLogger(__name__)
 CACHE_PATH = '.cache/'
@@ -37,10 +38,10 @@ CACHE_PATH = '.cache/'
 
 def get_tissue_IDs(dataset_name, image_objs, cache=True):
 
-    factor_hash = hashlib.sha256(
+    caching_hash = hashlib.sha256(
         ''.join([x.ID.GTEx_ID for x in image_objs]).encode('utf-8')
     ).hexdigest()
-    filepath = CACHE_PATH + dataset_name + f'_{factor_hash}_tissue_IDs.pkl'
+    filepath = CACHE_PATH + dataset_name + f'_{caching_hash}_tissue_IDs.pkl'
 
     if isfile(filepath) and cache:
         logger.debug('Loading tissue IDs from cache')
@@ -59,7 +60,7 @@ def generate_features(features_ID, patches, model_file_id):
         logger.debug('Loading features from cache')
         features = pickle.load(open(filepath, 'rb'))
     else:
-        logger.debug('Generating features')
+        logger.debug(f'Generating {model_file_id} features')
         m = load_model(
             'models/' + model_file_id + '.pkl'
         )
@@ -296,6 +297,14 @@ def generate_factors(dataset_name, image_objs, mode):
     return factor_IDs, unique_factor_IDs
 
 
+def subselect_tissue(dataset_name, tissue, features, image_objs):
+    tissue_IDs = get_tissue_IDs(dataset_name, image_objs)
+    tissue_idx = tissue_IDs == tissue
+    tissue_features = features[tissue_idx, :]
+    tissue_image_objs = np.array(image_objs)[tissue_idx].tolist()
+    return tissue_features, tissue_image_objs
+
+
 @click.command()
 @click.option(
     '--n_images', default=10,
@@ -331,19 +340,9 @@ def main(n_images, n_tissues, n_patches, patch_size, model_file_id):
 
     features = generate_features(features_ID, patches, model_file_id)
 
-    aggregated_features = {
-        'GTEx_factor_IDs': {},
-        'tissue_factor_IDs': {}
-    }
-
-    for agg in ['np.mean', 'np.median']:
-        aggregated_features['GTEx_factor_IDs'][agg] = aggregate_features(
-            dataset_name, features, image_objs, 'GTEx_IDs', eval(agg)
-        )
-        aggregated_features['tissue_factor_IDs'][agg] = aggregate_features(
-            dataset_name, features, image_objs, 'tissue_IDs', eval(agg)
-        )
-
+    a_features, a_image_objs = aggregate_features(
+        dataset_name, features, image_objs, 'GTEx_IDs', np.mean
+    )
 
     a_features, a_image_objs = aggregated_features['GTEx_factor_IDs']['np.mean']
 

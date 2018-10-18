@@ -8,3 +8,4 @@ models/
 tensorboardlogs/
 deps/
 .DS_Store
+tmp/

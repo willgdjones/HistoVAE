@@ -45,26 +45,42 @@ def main(n_tissues, n_images, n_patches, patch_size, model_file):
     dataset = Dataset(n_tissues=n_tissues, n_images=n_images)
     data = dataset.sample_data(patch_size, 15)
     patches_data, imageIDs_data = data
-    K = 15
+    K = 5
     N = patches_data.shape[0]
     idx = np.random.choice(range(N), K)
     patches = patches_data[idx]
     if model_file:
-        fig, ax = plt.subplots(
-            2, K, figsize=(1, 4)
-        )
+        # fig, ax = plt.subplots(
+        #     2, K, figsize=(8, 3)
+        # )
+        fig = plt.figure()
+        figsize = 128
+        figure = np.zeros((figsize * 2, figsize * K,  3))
         model = load_model(MODEL_PATH + f'{model_file}.pkl')
         decoded_patches = model.predict(patches)
-        fig.suptitle(model_file)
+        fig.suptitle(model_file, fontsize=10)
+
         for i in range(K):
-            ax[0][i].imshow(deprocess(patches[i]))
-            ax[0][i].axis('off')
-            ax[1][i].imshow(deprocess(decoded_patches[i]))
-            ax[1][i].axis('off')
-        plt.savefig(f'figures/{model_file}.png')
+            figure[
+                0 * figsize: (0 + 1) * figsize,
+                i * figsize: (i + 1) * figsize,
+                :
+            ] = deprocess(patches[i])
+            figure[
+                1 * figsize: (1 + 1) * figsize,
+                i * figsize: (i + 1) * figsize,
+                :
+            ] = deprocess(decoded_patches[i])
+            # ax[0][i].imshow(deprocess(patches[i]))
+            # ax[0][i].axis('off')
+            # ax[1][i].imshow(deprocess(decoded_patches[i]))
+            # ax[1][i].axis('off')
+        plt.imshow(figure)
+        fig.savefig(f'figures/{model_file}.png', bbox_inches='tight')
     else:
         model_files = sorted(os.listdir(MODEL_PATH))
         n = len(model_files)
+
         fig, ax = plt.subplots(
             2 * n, K, figsize=(8, 4 * n)
         )
